@@ -1,3 +1,5 @@
 databaseChangeLog:
   - include:
       file: db/changelog/changes/001-credentials.yaml
+  - include:
+      file: db/changelog/changes/002-refresh-tokens.yaml

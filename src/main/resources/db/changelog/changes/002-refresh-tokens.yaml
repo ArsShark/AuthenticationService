@@ -1,0 +1,57 @@
+databaseChangeLog:
+  - changeSet:
+      id: create-refresh-tokens-table
+      author: arsshark
+      changes:
+        - createTable:
+            tableName: refresh_tokens
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_refresh_tokens
+              - column:
+                  name: jti
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_refresh_tokens_jti
+              - column:
+                  name: credential_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_refresh_tokens_credential
+                    referencedTableName: credentials
+                    referencedColumnNames: id
+                    deleteCascade: true
+              - column:
+                  name: expires_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: revoked_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        # PostgreSQL does not index foreign key columns by itself. This index serves
+        # "revoke every token of a credential" and the ON DELETE CASCADE lookups.
+        - createIndex:
+            indexName: idx_refresh_tokens_credential_id
+            tableName: refresh_tokens
+            columns:
+              - column:
+                  name: credential_id
