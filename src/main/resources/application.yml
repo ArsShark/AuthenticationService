@@ -13,3 +13,9 @@ spring:
 
 server:
   port: ${SERVER_PORT:8081}
+
+logging:
+  level:
+    # At WARN, Hibernate logs the DETAIL of a failed statement: the whole failing row, including
+    # password_hash. Keep this logger at ERROR.
+    org.hibernate.orm.jdbc.error: ERROR
