@@ -2,6 +2,7 @@ package com.grechanikovars.authenticationservice.service;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -16,8 +17,10 @@ import com.grechanikovars.authenticationservice.entity.Role;
 import com.grechanikovars.authenticationservice.exception.LoginAlreadyExistsException;
 import com.grechanikovars.authenticationservice.exception.UserCredentialAlreadyExistsException;
 import com.grechanikovars.authenticationservice.repository.CredentialRepository;
+import com.grechanikovars.authenticationservice.service.CredentialService.AdminResult;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -123,6 +126,48 @@ class CredentialServiceTest {
 
     assertThrows(DataIntegrityViolationException.class,
         () -> service.register("alice@example.com", PASSWORD, USER_ID));
+  }
+
+  @Test
+  void createAdminStoresAnAdminWithoutAProfile() {
+    when(passwordEncoder.encode(PASSWORD)).thenReturn(HASH);
+    stubSaveAndFlush();
+
+    AdminResult result = service.createAdminIfAbsent("  Admin@Example.COM ", PASSWORD);
+
+    ArgumentCaptor<Credential> saved = ArgumentCaptor.forClass(Credential.class);
+    verify(credentialRepository).saveAndFlush(saved.capture());
+    Credential credential = saved.getValue();
+    assertAll(
+        () -> assertEquals(AdminResult.CREATED, result),
+        () -> assertEquals("admin@example.com", credential.getLogin()),
+        () -> assertEquals(HASH, credential.getPasswordHash()),
+        () -> assertEquals(Role.ADMIN, credential.getRole()),
+        () -> assertNull(credential.getUserId()));
+  }
+
+  @Test
+  void createAdminLeavesAnExistingAdminAlone() {
+    when(credentialRepository.findByLogin("admin@example.com"))
+        .thenReturn(Optional.of(new Credential("admin@example.com", HASH, Role.ADMIN, null)));
+
+    AdminResult result = service.createAdminIfAbsent("Admin@Example.com", PASSWORD);
+
+    assertEquals(AdminResult.ADMIN_EXISTS, result);
+    verifyNoInteractions(passwordEncoder);
+    verify(credentialRepository, never()).saveAndFlush(any(Credential.class));
+  }
+
+  @Test
+  void createAdminDoesNotTakeOverTheLoginOfAUser() {
+    when(credentialRepository.findByLogin("admin@example.com"))
+        .thenReturn(Optional.of(new Credential("admin@example.com", HASH, Role.USER, USER_ID)));
+
+    AdminResult result = service.createAdminIfAbsent("admin@example.com", PASSWORD);
+
+    assertEquals(AdminResult.LOGIN_TAKEN_BY_USER, result);
+    verifyNoInteractions(passwordEncoder);
+    verify(credentialRepository, never()).saveAndFlush(any(Credential.class));
   }
 
   /** Makes the repository behave like a database: it assigns the id and the audit times. */

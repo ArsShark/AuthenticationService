@@ -1,6 +1,7 @@
 package com.grechanikovars.authenticationservice.repository;
 
 import com.grechanikovars.authenticationservice.entity.Credential;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 /**
@@ -10,6 +11,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
  * derived queries here compare plain strings.
  */
 public interface CredentialRepository extends JpaRepository<Credential, Long> {
+
+  /**
+   * Finds the account with this login.
+   *
+   * @param login the normalized (stripped, lowercase) login
+   */
+  Optional<Credential> findByLogin(String login);
 
   /**
    * Tells whether an account with this login exists.

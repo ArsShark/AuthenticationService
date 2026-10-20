@@ -25,3 +25,7 @@ app:
     # The shared key of the internal endpoints (header X-Internal-Key). There is no real default:
     # an empty value stops the startup.
     api-key: ${INTERNAL_API_KEY:}
+  admin:
+    # The first admin, created at startup if the login does not exist yet. Set both or neither.
+    login: ${ADMIN_LOGIN:}
+    password: ${ADMIN_PASSWORD:}

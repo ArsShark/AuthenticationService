@@ -7,6 +7,7 @@ import com.grechanikovars.authenticationservice.exception.LoginAlreadyExistsExce
 import com.grechanikovars.authenticationservice.exception.UserCredentialAlreadyExistsException;
 import com.grechanikovars.authenticationservice.repository.CredentialRepository;
 import java.util.Locale;
+import java.util.Optional;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -64,6 +65,49 @@ public class CredentialService {
     Credential saved = credentialRepository.saveAndFlush(credential);
     LOGGER.info("Credential {} registered for user {}", saved.getId(), saved.getUserId());
     return CredentialResponse.from(saved);
+  }
+
+  /**
+   * Creates the account of an admin, unless the login already exists. An admin has the role
+   * {@link Role#ADMIN} and no user profile.
+   *
+   * <p>An existing account is never changed: the password of an existing admin is not overwritten,
+   * and an account of a user is not promoted. If two instances of the service start at the same
+   * time, the UNIQUE constraint rejects one insert with a {@link DataIntegrityViolationException},
+   * which is not caught here: the transaction is already marked for rollback, so the caller
+   * decides what it means.
+   *
+   * @param login the login of the admin, normalized like every login
+   * @param password the raw password; it is hashed and never stored or logged
+   * @return what happened, see {@link AdminResult}
+   */
+  @Transactional
+  public AdminResult createAdminIfAbsent(String login, String password) {
+    String normalizedLogin = normalize(login);
+    Optional<Credential> existing = credentialRepository.findByLogin(normalizedLogin);
+    if (existing.isPresent()) {
+      return existing.get().getRole() == Role.ADMIN
+          ? AdminResult.ADMIN_EXISTS
+          : AdminResult.LOGIN_TAKEN_BY_USER;
+    }
+    Credential credential = new Credential(
+        normalizedLogin, passwordEncoder.encode(password), Role.ADMIN, null);
+    Credential saved = credentialRepository.saveAndFlush(credential);
+    LOGGER.info("Admin credential {} created", saved.getId());
+    return AdminResult.CREATED;
+  }
+
+  /** The outcome of {@link #createAdminIfAbsent(String, String)}. */
+  public enum AdminResult {
+
+    /** A new admin account was created. */
+    CREATED,
+
+    /** An admin account with this login already exists; nothing was changed. */
+    ADMIN_EXISTS,
+
+    /** The login belongs to an account with the role USER; nothing was changed. */
+    LOGIN_TAKEN_BY_USER
   }
 
   private static String normalize(String login) {

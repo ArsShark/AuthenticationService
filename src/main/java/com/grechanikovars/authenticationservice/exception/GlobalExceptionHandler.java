@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.Objects;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -36,8 +35,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   /** The UNIQUE constraints of the database and the detail for the client when one is violated. */
   private static final Map<String, String> UNIQUE_CONSTRAINT_DETAILS = Map.of(
-      "uq_credentials_login", LoginAlreadyExistsException.MESSAGE,
-      "uq_credentials_user_id", UserCredentialAlreadyExistsException.MESSAGE);
+      ViolatedConstraint.UNIQUE_LOGIN, LoginAlreadyExistsException.MESSAGE,
+      ViolatedConstraint.UNIQUE_USER_ID, UserCredentialAlreadyExistsException.MESSAGE);
 
   /**
    * Handles a taken login or a user that already has an account.
@@ -76,7 +75,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   @ExceptionHandler(DataIntegrityViolationException.class)
   public ResponseEntity<ProblemDetail> handleDataIntegrityViolation(
       DataIntegrityViolationException ex) {
-    String constraint = findConstraintName(ex);
+    String constraint = ViolatedConstraint.nameOf(ex);
     String detail = constraint == null ? null : UNIQUE_CONSTRAINT_DETAILS.get(constraint);
     if (detail != null) {
       return reject(HttpStatus.CONFLICT, detail, ex);
@@ -117,16 +116,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     LOGGER.info("Request rejected with {}: {} invalid field(s)", HttpStatus.BAD_REQUEST.value(),
         errors.size());
     return handleExceptionInternal(ex, problem, headers, status, request);
-  }
-
-  /** Walks the cause chain for the Hibernate exception that carries the constraint name. */
-  private static String findConstraintName(Throwable ex) {
-    for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
-      if (cause instanceof ConstraintViolationException violation) {
-        return violation.getConstraintName();
-      }
-    }
-    return null;
   }
 
   /** A rejection of the client: logged at INFO in one line, without a stack trace. */

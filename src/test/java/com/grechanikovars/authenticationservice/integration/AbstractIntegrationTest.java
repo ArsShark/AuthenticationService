@@ -21,12 +21,18 @@ import org.springframework.test.web.servlet.MockMvc;
  * container is a bean of the context. So subclasses must not add {@code @MockitoBean},
  * {@code @TestPropertySource}, {@code @DirtiesContext} or an extra {@code @Import}: each of them
  * would create a new context and a new container. The properties of the context are set in the
- * {@code @SpringBootTest} annotation of this class, for all subclasses at once. Tests are not
+ * {@code @SpringBootTest} annotation of this class, for all subclasses at once; the first admin
+ * is switched off there, so an {@code ADMIN_LOGIN} in the environment of a developer cannot change
+ * a test. Tests are not
  * {@code @Transactional}, so they see real commits; {@link #resetState()} cleans up before every
  * test.
  */
 @Tag("integration")
-@SpringBootTest(properties = "app.internal.api-key=test-internal-key")
+@SpringBootTest(properties = {
+    "app.internal.api-key=test-internal-key",
+    "app.admin.login=",
+    "app.admin.password="
+})
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, TestClockConfiguration.class})
 public abstract class AbstractIntegrationTest {
