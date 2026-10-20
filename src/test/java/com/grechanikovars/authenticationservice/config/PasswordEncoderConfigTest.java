@@ -38,6 +38,21 @@ class PasswordEncoderConfigTest {
         () -> assertFalse(encoder.matches("another password", hash)));
   }
 
+  /**
+   * BCrypt looks only at the first 72 bytes of a password, and this version of Spring Security
+   * cuts a longer password silently: it does not throw, and the longer password matches the hash
+   * of its 72-byte prefix. Nothing in the encoder protects the service from that, so
+   * {@code PasswordPolicy} limits the length. If this test fails after an upgrade, the library has
+   * changed: revisit the policy and this comment.
+   */
+  @Test
+  void bcryptCutsPasswordsAtSeventyTwoBytes() {
+    String prefix = "a".repeat(72);
+    String longer = prefix.concat("b");
+
+    assertTrue(encoder.matches(longer, encoder.encode(prefix)));
+  }
+
   @Test
   void samePasswordGivesDifferentHashesBecauseEverySaltIsUnique() {
     String first = encoder.encode(PASSWORD);
