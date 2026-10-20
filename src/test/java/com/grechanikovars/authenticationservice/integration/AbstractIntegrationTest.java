@@ -9,8 +9,10 @@ import org.junit.jupiter.api.Tag;
 import org.postgresql.util.PSQLException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * Base class of all integration tests.
@@ -25,6 +27,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  */
 @Tag("integration")
 @SpringBootTest(properties = "app.internal.api-key=test-internal-key")
+@AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, TestClockConfiguration.class})
 public abstract class AbstractIntegrationTest {
 
@@ -36,6 +39,10 @@ public abstract class AbstractIntegrationTest {
 
   @Autowired
   protected JdbcTemplate jdbcTemplate;
+
+  /** Sends requests through the whole stack, from the servlet layer to the database. */
+  @Autowired
+  protected MockMvc mockMvc;
 
   @Autowired
   protected MutableClock clock;
