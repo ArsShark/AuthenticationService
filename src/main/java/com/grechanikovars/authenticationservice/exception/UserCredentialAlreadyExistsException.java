@@ -7,7 +7,10 @@ package com.grechanikovars.authenticationservice.exception;
  */
 public class UserCredentialAlreadyExistsException extends RuntimeException {
 
+  /** The message, also used by the error handler for a lost race on the UNIQUE constraint. */
+  public static final String MESSAGE = "This user already has an account";
+
   public UserCredentialAlreadyExistsException() {
-    super("This user already has an account");
+    super(MESSAGE);
   }
 }

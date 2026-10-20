@@ -7,7 +7,10 @@ package com.grechanikovars.authenticationservice.exception;
  */
 public class LoginAlreadyExistsException extends RuntimeException {
 
+  /** The message, also used by the error handler for a lost race on the UNIQUE constraint. */
+  public static final String MESSAGE = "An account with this login already exists";
+
   public LoginAlreadyExistsException() {
-    super("An account with this login already exists");
+    super(MESSAGE);
   }
 }
