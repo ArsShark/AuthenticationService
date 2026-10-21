@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
@@ -39,7 +40,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * is a mock.
  */
 @WebMvcTest(controllers = CredentialController.class,
-    properties = "app.internal.api-key=test-internal-key")
+    properties = "app.internal.api-key=test-internal-key",
+    excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class)
 @Import({SecurityConfig.class, InternalApiConfig.class})
 class CredentialControllerTest {
 
@@ -187,13 +189,13 @@ class CredentialControllerTest {
 
   /**
    * The route that the Gateway opens to the outside must not lead to this endpoint. The closed
-   * security chain answers before Spring MVC; without an entry point of our own the answer for an
-   * anonymous caller is 403 for now (it becomes 401 when the entry point is added).
+   * security chain answers an anonymous caller with 401 before Spring MVC sees the request; the
+   * key header means nothing outside {@code /internal}.
    */
   @Test
   void theEndpointIsNotUnderTheAuthApiPath() throws Exception {
     mockMvc.perform(get("/api/auth/credentials").header(InternalKeyInterceptor.HEADER, KEY))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isUnauthorized());
     verifyNoInteractions(credentialService);
   }
 

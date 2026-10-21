@@ -19,6 +19,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -83,6 +85,32 @@ class GlobalExceptionHandlerTest {
         content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
         jsonPath("$.status").value(401),
         jsonPath("$.detail").value("Missing or invalid internal key"));
+  }
+
+  @Test
+  void authenticationFailureIsUnauthorizedWithAConstantDetail() throws Exception {
+    controller.toThrow = new BadCredentialsException("this message must not reach the client");
+
+    MvcResult result = mockMvc.perform(get("/test/throw")).andExpectAll(
+        status().isUnauthorized(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
+        jsonPath("$.status").value(401),
+        jsonPath("$.detail").value("Authentication is required")).andReturn();
+
+    assertFalse(bodyOf(result).contains("must not reach the client"));
+  }
+
+  @Test
+  void accessDeniedIsForbiddenWithAConstantDetail() throws Exception {
+    controller.toThrow = new AccessDeniedException("this message must not reach the client");
+
+    MvcResult result = mockMvc.perform(get("/test/throw")).andExpectAll(
+        status().isForbidden(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
+        jsonPath("$.status").value(403),
+        jsonPath("$.detail").value("Access is denied")).andReturn();
+
+    assertFalse(bodyOf(result).contains("must not reach the client"));
   }
 
   @Test
