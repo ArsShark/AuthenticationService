@@ -76,15 +76,18 @@ class GlobalExceptionHandlerTest {
         jsonPath("$.detail").value(UserCredentialAlreadyExistsException.MESSAGE));
   }
 
+  /** A wrong internal key is an authentication failure: the same 401, nothing about the key. */
   @Test
-  void invalidInternalKeyIsUnauthorized() throws Exception {
+  void invalidInternalKeyIsUnauthorizedWithAConstantDetail() throws Exception {
     controller.toThrow = new InvalidInternalKeyException();
 
-    mockMvc.perform(get("/test/throw")).andExpectAll(
+    MvcResult result = mockMvc.perform(get("/test/throw")).andExpectAll(
         status().isUnauthorized(),
         content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
         jsonPath("$.status").value(401),
-        jsonPath("$.detail").value("Missing or invalid internal key"));
+        jsonPath("$.detail").value("Authentication is required")).andReturn();
+
+    assertFalse(bodyOf(result).contains("internal key"));
   }
 
   @Test

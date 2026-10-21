@@ -10,9 +10,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.grechanikovars.authenticationservice.controller.CredentialController;
+import com.grechanikovars.authenticationservice.security.InternalKeyAuthenticationFilter;
 import com.grechanikovars.authenticationservice.service.CredentialService;
 import jakarta.servlet.DispatcherType;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -36,6 +39,8 @@ import org.springframework.test.web.servlet.MvcResult;
 @Import(SecurityConfig.class)
 class SecurityConfigTest {
 
+  private static final String KEY = "test-internal-key";
+
   @Autowired
   private MockMvc mockMvc;
 
@@ -50,6 +55,48 @@ class SecurityConfigTest {
         jsonPath("$.status").value(401),
         jsonPath("$.detail").value("Authentication is required"),
         header().doesNotExist("WWW-Authenticate"));
+  }
+
+  /**
+   * The endpoint has no GET, so the 405 is Spring MVC's own answer: it proves that Security let
+   * the request through.
+   */
+  @Test
+  void anInternalPathWithTheRightKeyIsAuthorized() throws Exception {
+    mockMvc.perform(get("/internal/credentials")
+        .header(InternalKeyAuthenticationFilter.HEADER, KEY))
+        .andExpect(status().isMethodNotAllowed());
+  }
+
+  @Test
+  void anInternalPathWithoutTheKeyIsAnUnauthorizedProblem() throws Exception {
+    mockMvc.perform(get("/internal/credentials")).andExpectAll(
+        status().isUnauthorized(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
+        jsonPath("$.status").value(401),
+        jsonPath("$.detail").value("Authentication is required"));
+  }
+
+  /** A wrong key gets the very same answer as a missing key: the caller learns nothing. */
+  @Test
+  void aWrongKeyGetsTheSameAnswerAsAMissingKey() throws Exception {
+    mockMvc.perform(get("/internal/credentials")
+        .header(InternalKeyAuthenticationFilter.HEADER, "wrong-key")).andExpectAll(
+        status().isUnauthorized(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
+        jsonPath("$.status").value(401),
+        jsonPath("$.detail").value("Authentication is required"));
+  }
+
+  /** A caller with a user or admin role is authenticated, but the internal role is not theirs. */
+  @ParameterizedTest
+  @ValueSource(strings = {"USER", "ADMIN"})
+  void aCallerWithoutTheInternalRoleIsForbiddenOnAnInternalPath(String role) throws Exception {
+    mockMvc.perform(get("/internal/credentials").with(user("alice").roles(role))).andExpectAll(
+        status().isForbidden(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
+        jsonPath("$.status").value(403),
+        jsonPath("$.detail").value("Access is denied"));
   }
 
   @Test

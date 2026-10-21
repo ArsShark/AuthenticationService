@@ -60,17 +60,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   }
 
   /**
-   * Handles a missing or wrong internal key.
-   *
-   * @param ex the rejection of the interceptor
-   * @return 401
-   */
-  @ExceptionHandler(InvalidInternalKeyException.class)
-  public ResponseEntity<ProblemDetail> handleInvalidInternalKey(InvalidInternalKeyException ex) {
-    return reject(HttpStatus.UNAUTHORIZED, ex.getMessage(), ex);
-  }
-
-  /**
    * Handles a caller that is not authenticated.
    *
    * <p>The detail is a constant and never says why: a missing and a wrong credential look the

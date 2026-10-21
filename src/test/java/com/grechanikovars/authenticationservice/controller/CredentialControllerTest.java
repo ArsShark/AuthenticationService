@@ -12,13 +12,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.grechanikovars.authenticationservice.config.InternalApiConfig;
 import com.grechanikovars.authenticationservice.config.SecurityConfig;
 import com.grechanikovars.authenticationservice.dto.response.CredentialResponse;
 import com.grechanikovars.authenticationservice.entity.Role;
 import com.grechanikovars.authenticationservice.exception.LoginAlreadyExistsException;
 import com.grechanikovars.authenticationservice.exception.UserCredentialAlreadyExistsException;
-import com.grechanikovars.authenticationservice.security.InternalKeyInterceptor;
+import com.grechanikovars.authenticationservice.security.InternalKeyAuthenticationFilter;
 import com.grechanikovars.authenticationservice.service.CredentialService;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -35,14 +34,14 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * Tests the HTTP contract of {@link CredentialController}: the security chain, the internal key
- * interceptor, the controller, the validation and the error handler work together; the service
+ * Tests the HTTP contract of {@link CredentialController}: the security chain with the internal
+ * key filter, the controller, the validation and the error handler work together; the service
  * is a mock.
  */
 @WebMvcTest(controllers = CredentialController.class,
     properties = "app.internal.api-key=test-internal-key",
     excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class)
-@Import({SecurityConfig.class, InternalApiConfig.class})
+@Import(SecurityConfig.class)
 class CredentialControllerTest {
 
   private static final String PATH = "/internal/credentials";
@@ -68,7 +67,7 @@ class CredentialControllerTest {
         new CredentialResponse(42L, "alice@example.com", Role.USER, 7L,
             Instant.parse("2026-10-19T10:00:00Z")));
 
-    mockMvc.perform(jsonPost(VALID_BODY).header(InternalKeyInterceptor.HEADER, KEY))
+    mockMvc.perform(jsonPost(VALID_BODY).header(InternalKeyAuthenticationFilter.HEADER, KEY))
         .andExpectAll(
             status().isCreated(),
             header().doesNotExist(HttpHeaders.LOCATION),
@@ -89,14 +88,14 @@ class CredentialControllerTest {
         status().isUnauthorized(),
         content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
         jsonPath("$.status").value(401),
-        jsonPath("$.detail").value("Missing or invalid internal key"));
+        jsonPath("$.detail").value("Authentication is required"));
 
     verifyNoInteractions(credentialService);
   }
 
   @Test
   void wrongKeyIsUnauthorizedAndTheServiceIsNotCalled() throws Exception {
-    mockMvc.perform(jsonPost(VALID_BODY).header(InternalKeyInterceptor.HEADER, "wrong-key"))
+    mockMvc.perform(jsonPost(VALID_BODY).header(InternalKeyAuthenticationFilter.HEADER, "wrong-key"))
         .andExpectAll(
             status().isUnauthorized(),
             content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
@@ -107,7 +106,7 @@ class CredentialControllerTest {
   /** The key is checked before the body is read, so the caller learns nothing about the body. */
   @Test
   void wrongKeyBeatsAnInvalidBody() throws Exception {
-    mockMvc.perform(jsonPost(INVALID_BODY).header(InternalKeyInterceptor.HEADER, "wrong-key"))
+    mockMvc.perform(jsonPost(INVALID_BODY).header(InternalKeyAuthenticationFilter.HEADER, "wrong-key"))
         .andExpect(status().isUnauthorized());
 
     verifyNoInteractions(credentialService);
@@ -116,7 +115,7 @@ class CredentialControllerTest {
   @Test
   void invalidBodyIsBadRequestWithoutRejectedValuesAndTheServiceIsNotCalled() throws Exception {
     MvcResult result = mockMvc
-        .perform(jsonPost(INVALID_BODY).header(InternalKeyInterceptor.HEADER, KEY))
+        .perform(jsonPost(INVALID_BODY).header(InternalKeyAuthenticationFilter.HEADER, KEY))
         .andExpectAll(
             status().isBadRequest(),
             content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
@@ -135,7 +134,7 @@ class CredentialControllerTest {
 
   @Test
   void malformedJsonIsBadRequest() throws Exception {
-    mockMvc.perform(jsonPost("{not json").header(InternalKeyInterceptor.HEADER, KEY))
+    mockMvc.perform(jsonPost("{not json").header(InternalKeyAuthenticationFilter.HEADER, KEY))
         .andExpectAll(
             status().isBadRequest(),
             content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
@@ -148,7 +147,7 @@ class CredentialControllerTest {
     when(credentialService.register("alice@example.com", PASSWORD, 7L))
         .thenThrow(new LoginAlreadyExistsException());
 
-    mockMvc.perform(jsonPost(VALID_BODY).header(InternalKeyInterceptor.HEADER, KEY))
+    mockMvc.perform(jsonPost(VALID_BODY).header(InternalKeyAuthenticationFilter.HEADER, KEY))
         .andExpectAll(
             status().isConflict(),
             jsonPath("$.detail").value(LoginAlreadyExistsException.MESSAGE));
@@ -159,7 +158,7 @@ class CredentialControllerTest {
     when(credentialService.register("alice@example.com", PASSWORD, 7L))
         .thenThrow(new UserCredentialAlreadyExistsException());
 
-    mockMvc.perform(jsonPost(VALID_BODY).header(InternalKeyInterceptor.HEADER, KEY))
+    mockMvc.perform(jsonPost(VALID_BODY).header(InternalKeyAuthenticationFilter.HEADER, KEY))
         .andExpectAll(
             status().isConflict(),
             jsonPath("$.detail").value(UserCredentialAlreadyExistsException.MESSAGE));
@@ -171,7 +170,7 @@ class CredentialControllerTest {
         .thenThrow(new IllegalStateException("secret internal detail"));
 
     MvcResult result = mockMvc
-        .perform(jsonPost(VALID_BODY).header(InternalKeyInterceptor.HEADER, KEY))
+        .perform(jsonPost(VALID_BODY).header(InternalKeyAuthenticationFilter.HEADER, KEY))
         .andExpectAll(
             status().isInternalServerError(),
             jsonPath("$.detail").value("An unexpected error occurred"))
@@ -183,7 +182,7 @@ class CredentialControllerTest {
 
   @Test
   void getIsMethodNotAllowed() throws Exception {
-    mockMvc.perform(get(PATH).header(InternalKeyInterceptor.HEADER, KEY))
+    mockMvc.perform(get(PATH).header(InternalKeyAuthenticationFilter.HEADER, KEY))
         .andExpect(status().isMethodNotAllowed());
   }
 
@@ -194,7 +193,7 @@ class CredentialControllerTest {
    */
   @Test
   void theEndpointIsNotUnderTheAuthApiPath() throws Exception {
-    mockMvc.perform(get("/api/auth/credentials").header(InternalKeyInterceptor.HEADER, KEY))
+    mockMvc.perform(get("/api/auth/credentials").header(InternalKeyAuthenticationFilter.HEADER, KEY))
         .andExpect(status().isUnauthorized());
     verifyNoInteractions(credentialService);
   }
