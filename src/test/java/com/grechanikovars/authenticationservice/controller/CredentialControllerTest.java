@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.grechanikovars.authenticationservice.config.InternalApiConfig;
+import com.grechanikovars.authenticationservice.config.SecurityConfig;
 import com.grechanikovars.authenticationservice.dto.response.CredentialResponse;
 import com.grechanikovars.authenticationservice.entity.Role;
 import com.grechanikovars.authenticationservice.exception.LoginAlreadyExistsException;
@@ -33,12 +34,13 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * Tests the HTTP contract of {@link CredentialController}: the controller, the internal key
- * interceptor, the validation and the error handler work together; the service is a mock.
+ * Tests the HTTP contract of {@link CredentialController}: the security chain, the internal key
+ * interceptor, the controller, the validation and the error handler work together; the service
+ * is a mock.
  */
 @WebMvcTest(controllers = CredentialController.class,
     properties = "app.internal.api-key=test-internal-key")
-@Import(InternalApiConfig.class)
+@Import({SecurityConfig.class, InternalApiConfig.class})
 class CredentialControllerTest {
 
   private static final String PATH = "/internal/credentials";
@@ -183,11 +185,16 @@ class CredentialControllerTest {
         .andExpect(status().isMethodNotAllowed());
   }
 
-  /** The route that the Gateway opens to the outside must not lead to this endpoint. */
+  /**
+   * The route that the Gateway opens to the outside must not lead to this endpoint. The closed
+   * security chain answers before Spring MVC; without an entry point of our own the answer for an
+   * anonymous caller is 403 for now (it becomes 401 when the entry point is added).
+   */
   @Test
   void theEndpointIsNotUnderTheAuthApiPath() throws Exception {
     mockMvc.perform(get("/api/auth/credentials").header(InternalKeyInterceptor.HEADER, KEY))
-        .andExpect(status().isNotFound());
+        .andExpect(status().isForbidden());
+    verifyNoInteractions(credentialService);
   }
 
   private static MockHttpServletRequestBuilder jsonPost(String body) {
