@@ -118,6 +118,20 @@
 		</dependency>
 
 		<dependency>
+			<!-- Brings Spring Security JOSE (NimbusJwtEncoder, NimbusJwtDecoder) and the Nimbus library.
+			     No resource-server filter is configured here: the endpoints of this service never
+			     take a bearer token. -->
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
+			<exclusions>
+				<exclusion>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-logging</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+
+		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>

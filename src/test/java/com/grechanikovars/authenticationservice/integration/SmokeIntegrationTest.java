@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.grechanikovars.authenticationservice.TestKeys;
+import com.grechanikovars.authenticationservice.security.JwtKeys;
 import java.time.Clock;
 import java.util.List;
 import org.apache.logging.log4j.LogManager;
@@ -20,6 +22,9 @@ class SmokeIntegrationTest extends AbstractIntegrationTest {
 
   @Autowired
   private Clock applicationClock;
+
+  @Autowired
+  private JwtKeys jwtKeys;
 
   /** A failure here means a wiring problem or a mismatch found by {@code ddl-auto: validate}. */
   @Test
@@ -38,6 +43,12 @@ class SmokeIntegrationTest extends AbstractIntegrationTest {
   @Test
   void testClockReplacesTheApplicationClock() {
     assertSame(clock, applicationClock);
+  }
+
+  /** The key of the context comes from the test property, so the tokens have a known key id. */
+  @Test
+  void signingKeyComesFromTheTestProperty() {
+    assertEquals(TestKeys.jwtKeys().keyId(), jwtKeys.keyId());
   }
 
   /**

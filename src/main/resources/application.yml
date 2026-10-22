@@ -29,3 +29,11 @@ app:
     # The first admin, created at startup if the login does not exist yet. Set both or neither.
     login: ${ADMIN_LOGIN:}
     password: ${ADMIN_PASSWORD:}
+  jwt:
+    # The RSA private key that signs the tokens: PKCS#8 DER, base64 on one line (see the README).
+    # There is no default: an empty value stops the startup. The public key and the key id are
+    # derived from it.
+    private-key: ${JWT_PRIVATE_KEY:}
+    access-ttl: ${JWT_ACCESS_TTL:PT15M}
+    refresh-ttl: ${JWT_REFRESH_TTL:P7D}
+    issuer: ${JWT_ISSUER:authentication-service}
