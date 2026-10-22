@@ -11,7 +11,6 @@ import com.grechanikovars.authenticationservice.service.CredentialService;
 import jakarta.validation.Validator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -120,10 +119,5 @@ class AdminInitializerIntegrationTest extends AbstractIntegrationTest {
 
   private String passwordHash() {
     return jdbcTemplate.queryForObject("SELECT password_hash FROM credentials", String.class);
-  }
-
-  private int countAccounts() {
-    return Objects.requireNonNull(
-        jdbcTemplate.queryForObject("SELECT count(*) FROM credentials", Integer.class));
   }
 }

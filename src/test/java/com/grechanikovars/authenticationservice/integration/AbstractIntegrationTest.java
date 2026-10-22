@@ -73,6 +73,12 @@ public abstract class AbstractIntegrationTest {
     return Objects.requireNonNull(id);
   }
 
+  /** Counts the rows of {@code credentials}. */
+  protected int countAccounts() {
+    return Objects.requireNonNull(
+        jdbcTemplate.queryForObject("SELECT count(*) FROM credentials", Integer.class));
+  }
+
   /** Inserts a valid refresh token (it expires in 7 days) with plain SQL. */
   protected void insertRefreshToken(UUID jti, long credentialId) {
     jdbcTemplate.update("""

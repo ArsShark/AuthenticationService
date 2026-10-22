@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -204,10 +203,5 @@ class CredentialRegistrationIntegrationTest extends AbstractIntegrationTest {
     } finally {
       executor.shutdownNow();
     }
-  }
-
-  private int countAccounts() {
-    return Objects.requireNonNull(
-        jdbcTemplate.queryForObject("SELECT count(*) FROM credentials", Integer.class));
   }
 }
