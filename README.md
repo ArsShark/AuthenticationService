@@ -3,8 +3,9 @@
 Part of the e-commerce microservice application (Innowise Java Advanced course).
 The service stores user credentials and issues JWT tokens.
 
-**Status:** the database layer and the internal endpoint that creates accounts are ready. Token
-logic (login, refresh, validation, JWKS) comes in the next pull requests.
+**Status:** the database layer, the internal endpoint that creates accounts and the Spring Security
+foundation (a closed stateless chain, the internal key as a security filter) are ready. Token logic
+(login, refresh, validation, JWKS) comes in the next pull requests.
 
 ## Requirements
 
@@ -106,7 +107,8 @@ Responses (errors are RFC 9457 `application/problem+json`):
 |---|---|
 | `201` | Created. The body is `{id, login, role, userId, createdAt}`; it never contains the password or its hash, and there is no `Location` header |
 | `400` | The body is invalid. The extension `errors` lists `{field, message}`, sorted by field; rejected values are never echoed |
-| `401` | The header `X-Internal-Key` is missing or wrong |
+| `401` | The header `X-Internal-Key` is missing or wrong. The answer is the same for both, so a caller learns nothing about the key |
+| `403` | The caller is authenticated, but is not the internal caller (for example a user or admin token) |
 | `409` | The login is taken, or the user already has an account |
 | `500` | Unexpected error, with a generic message |
 
@@ -138,11 +140,39 @@ needs no manual step in a fresh Docker Compose or Kubernetes setup:
   overwrite the old one, and a login that already belongs to a user is not taken over (a warning
   is logged).
 
+## Security model
+
+The service is a stateless API and is closed by default: a request is allowed only if a rule says
+so, and everything else is denied before Spring MVC sees it.
+
+| Request | Answer |
+|---|---|
+| `/internal/**` with the right `X-Internal-Key` | Allowed: the caller gets the role `INTERNAL` |
+| `/internal/**` with no key or a wrong key | `401` |
+| `/internal/**` by an authenticated caller who is not the internal caller | `403` |
+| Any other path, anonymous caller | `401`, also when the path does not exist |
+| Any other path, authenticated caller | `403` |
+
+- There are no sessions, cookies, login forms or CSRF tokens: nothing in this API uses them.
+- `401` and `403` are `application/problem+json`, written in the same place as every other error,
+  with constant texts: `Authentication is required` and `Access is denied`. A missing key and a
+  wrong key get the same answer.
+- The internal key is checked only under `/internal/`; anywhere else the header means nothing.
+- An unknown path is a `401`, not a `404`, so an anonymous caller cannot find out which paths exist.
+- Login, refresh, validation and JWKS endpoints come with the JWT pull request and are opened in
+  the same list of rules.
+
 ## Security notes
 
 - Passwords are hashed with BCrypt (a unique salt per password, the salt is part of the hash).
   Passwords, hashes, logins and keys are never logged, and the `toString()` of the request and the
   settings do not print them.
+- The internal key is compared in constant time (`MessageDigest.isEqual`) and checked before the
+  request body is read, so a wrong key is a `401` even for an invalid body.
+- Spring Boot's default user with a random password (it prints the password to the log) is switched
+  off: this service checks accounts with its own code.
+- The default response headers of Spring Security stay on, for example `X-Content-Type-Options:
+  nosniff` and `Cache-Control: no-store`.
 - The Hibernate logger `org.hibernate.orm.jdbc.error` is set to `ERROR`: at `WARN` it logs the
   whole failing row, including the password hash.
 - Duplicates are rejected by the database (UNIQUE constraints), so parallel requests cannot create
