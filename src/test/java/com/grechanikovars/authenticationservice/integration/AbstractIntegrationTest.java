@@ -9,8 +9,10 @@ import org.junit.jupiter.api.Tag;
 import org.postgresql.util.PSQLException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * Base class of all integration tests.
@@ -18,11 +20,20 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <p>Every subclass shares ONE Spring context and one PostgreSQL container, because the
  * container is a bean of the context. So subclasses must not add {@code @MockitoBean},
  * {@code @TestPropertySource}, {@code @DirtiesContext} or an extra {@code @Import}: each of them
- * would create a new context and a new container. Tests are not {@code @Transactional}, so they
- * see real commits; {@link #resetState()} cleans up before every test.
+ * would create a new context and a new container. The properties of the context are set in the
+ * {@code @SpringBootTest} annotation of this class, for all subclasses at once; the first admin
+ * is switched off there, so an {@code ADMIN_LOGIN} in the environment of a developer cannot change
+ * a test. Tests are not
+ * {@code @Transactional}, so they see real commits; {@link #resetState()} cleans up before every
+ * test.
  */
 @Tag("integration")
-@SpringBootTest
+@SpringBootTest(properties = {
+    "app.internal.api-key=test-internal-key",
+    "app.admin.login=",
+    "app.admin.password="
+})
+@AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, TestClockConfiguration.class})
 public abstract class AbstractIntegrationTest {
 
@@ -34,6 +45,10 @@ public abstract class AbstractIntegrationTest {
 
   @Autowired
   protected JdbcTemplate jdbcTemplate;
+
+  /** Sends requests through the whole stack, from the servlet layer to the database. */
+  @Autowired
+  protected MockMvc mockMvc;
 
   @Autowired
   protected MutableClock clock;
