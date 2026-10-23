@@ -29,8 +29,9 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
  *
  * <p>The endpoints that hand out tokens are open to everybody, because the caller has no token
  * yet: {@code POST /api/auth/login}, {@code POST /api/auth/refresh} and
- * {@code POST /api/auth/validate}. Each is listed with its HTTP method, so another method on the
- * same path stays closed.
+ * {@code POST /api/auth/validate}. So is the key that verifies them,
+ * {@code GET /.well-known/jwks.json}, because a public key is not a secret. Each is listed with
+ * its HTTP method, so another method on the same path stays closed.
  *
  * <p>{@code /internal/**} is for other services only. It requires the role
  * {@value InternalKeyAuthenticationFilter#ROLE}, which only {@link InternalKeyAuthenticationFilter}
@@ -80,6 +81,7 @@ public class SecurityConfig {
             .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
             .requestMatchers(HttpMethod.POST,
                 "/api/auth/login", "/api/auth/refresh", "/api/auth/validate").permitAll()
+            .requestMatchers(HttpMethod.GET, "/.well-known/jwks.json").permitAll()
             .requestMatchers("/internal/**").hasRole(InternalKeyAuthenticationFilter.ROLE)
             .anyRequest().denyAll())
         .build();

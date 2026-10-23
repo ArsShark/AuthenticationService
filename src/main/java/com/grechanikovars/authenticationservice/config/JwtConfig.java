@@ -1,5 +1,6 @@
 package com.grechanikovars.authenticationservice.config;
 
+import com.grechanikovars.authenticationservice.security.JwksDocument;
 import com.grechanikovars.authenticationservice.security.JwtKeys;
 import java.time.Clock;
 import java.time.Duration;
@@ -40,6 +41,17 @@ public class JwtConfig {
   @Bean
   public JwtKeys jwtKeys(JwtProperties properties) {
     return JwtKeys.fromPkcs8Base64(properties.privateKey());
+  }
+
+  /**
+   * Builds the JSON Web Key Set that publishes the public key, once, at startup.
+   *
+   * @param keys the key pair; only the public key and the key id are used
+   * @return the document that the JWKS endpoint returns
+   */
+  @Bean
+  public JwksDocument jwksDocument(JwtKeys keys) {
+    return JwksDocument.from(keys);
   }
 
   /**

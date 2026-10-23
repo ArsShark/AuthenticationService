@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.grechanikovars.authenticationservice.TestKeys;
 import com.grechanikovars.authenticationservice.integration.MutableClock;
+import com.grechanikovars.authenticationservice.security.JwksDocument;
 import com.grechanikovars.authenticationservice.security.JwtKeys;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -68,6 +69,16 @@ class JwtConfigTest {
           () -> assertEquals("RS256", String.valueOf(decoded.getHeaders().get("alg"))),
           () -> assertEquals("JWT", String.valueOf(decoded.getHeaders().get("typ"))),
           () -> assertEquals(keys.keyId(), decoded.getHeaders().get("kid")));
+    });
+  }
+
+  @Test
+  void createsTheDocumentThatPublishesThePublicKey() {
+    runner.run(context -> {
+      JwtKeys keys = context.getBean(JwtKeys.class);
+      JwksDocument document = context.getBean(JwksDocument.class);
+
+      assertEquals(JwksDocument.from(keys), document);
     });
   }
 
