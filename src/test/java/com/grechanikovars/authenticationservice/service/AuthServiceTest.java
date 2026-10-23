@@ -220,4 +220,27 @@ class AuthServiceTest {
   private RefreshTokenClaims claimsOf(UUID jti) {
     return new RefreshTokenClaims(CREDENTIAL_ID, jti, NOW.plus(Duration.ofDays(1)));
   }
+
+  /** The answer comes from the token alone: the database is not asked. */
+  @Test
+  void validateReturnsTheClaimsOfAValidAccessToken() {
+    AccessTokenClaims claims = new AccessTokenClaims(CREDENTIAL_ID, USER_ID, Role.USER,
+        "alice@example.com", NOW.plus(Duration.ofMinutes(15)));
+    when(tokens.parseAccessToken("access-value")).thenReturn(Optional.of(claims));
+
+    Optional<AccessTokenClaims> result = service.validate("access-value");
+
+    assertEquals(Optional.of(claims), result);
+    verifyNoInteractions(credentials, refreshTokens);
+  }
+
+  @Test
+  void validateOfATokenThatIsNotValidIsEmpty() {
+    when(tokens.parseAccessToken("garbage")).thenReturn(Optional.empty());
+
+    Optional<AccessTokenClaims> result = service.validate("garbage");
+
+    assertEquals(Optional.empty(), result);
+    verifyNoInteractions(credentials, refreshTokens);
+  }
 }

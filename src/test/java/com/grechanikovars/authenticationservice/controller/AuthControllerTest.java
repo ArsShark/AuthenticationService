@@ -14,14 +14,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.grechanikovars.authenticationservice.config.SecurityConfig;
+import com.grechanikovars.authenticationservice.entity.Role;
 import com.grechanikovars.authenticationservice.exception.InvalidCredentialsException;
 import com.grechanikovars.authenticationservice.exception.InvalidRefreshTokenException;
+import com.grechanikovars.authenticationservice.service.AccessTokenClaims;
 import com.grechanikovars.authenticationservice.service.AuthService;
 import com.grechanikovars.authenticationservice.service.IssuedToken;
 import com.grechanikovars.authenticationservice.service.TokenPair;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,6 +51,8 @@ class AuthControllerTest {
   private static final String PATH = "/api/auth/login";
   private static final String REFRESH_PATH = "/api/auth/refresh";
   private static final String REFRESH_TOKEN = "old-refresh-token";
+  private static final String VALIDATE_PATH = "/api/auth/validate";
+  private static final String ACCESS_TOKEN = "some-access-token";
   private static final String PASSWORD = "s3cret-passw0rd";
   private static final Instant NOW = Instant.parse("2026-10-19T10:00:00Z");
 
@@ -238,6 +243,75 @@ class AuthControllerTest {
     mockMvc.perform(get(REFRESH_PATH)).andExpect(status().isUnauthorized());
 
     verifyNoInteractions(authService);
+  }
+
+  /** The validation is open to everybody too: it only tells what the caller's own token says. */
+  @Test
+  void validateTellsWhoAValidTokenBelongsTo() throws Exception {
+    when(authService.validate(ACCESS_TOKEN)).thenReturn(Optional.of(new AccessTokenClaims(
+        42L, 7L, Role.USER, "alice@example.com", NOW.plus(Duration.ofMinutes(15)))));
+
+    mockMvc.perform(validatePost(validateBody(ACCESS_TOKEN))).andExpectAll(
+        status().isOk(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON),
+        header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")),
+        jsonPath("$.valid").value(true),
+        jsonPath("$.userId").value(7),
+        jsonPath("$.role").value("USER"),
+        jsonPath("$.expiresAt").value(NOW.plus(Duration.ofMinutes(15)).toString()),
+        jsonPath("$.email").doesNotExist(),
+        jsonPath("$.credentialId").doesNotExist());
+
+    verify(authService).validate(ACCESS_TOKEN);
+  }
+
+  @Test
+  void anAdminWithoutAProfileHasNoUserIdInTheAnswer() throws Exception {
+    when(authService.validate(ACCESS_TOKEN)).thenReturn(Optional.of(new AccessTokenClaims(
+        42L, null, Role.ADMIN, "admin@example.com", NOW.plus(Duration.ofMinutes(15)))));
+
+    mockMvc.perform(validatePost(validateBody(ACCESS_TOKEN))).andExpectAll(
+        status().isOk(),
+        jsonPath("$.valid").value(true),
+        jsonPath("$.role").value("ADMIN"),
+        jsonPath("$.userId").doesNotExist());
+  }
+
+  /** A token that is not valid is an answer, not an error, and the answer has no reason. */
+  @Test
+  void aTokenThatIsNotValidGetsOnlyValidFalse() throws Exception {
+    when(authService.validate(ACCESS_TOKEN)).thenReturn(Optional.empty());
+
+    mockMvc.perform(validatePost(validateBody(ACCESS_TOKEN))).andExpectAll(
+        status().isOk(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON),
+        content().string("{\"valid\":false}"));
+  }
+
+  @Test
+  void validateWithoutATokenIsBadRequestAndTheServiceIsNotCalled() throws Exception {
+    mockMvc.perform(validatePost("{}")).andExpectAll(
+        status().isBadRequest(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
+        jsonPath("$.errors.length()").value(1),
+        jsonPath("$.errors[0].field").value("token"));
+
+    verifyNoInteractions(authService);
+  }
+
+  @Test
+  void getOnTheValidatePathIsUnauthorizedBecauseOnlyPostIsOpen() throws Exception {
+    mockMvc.perform(get(VALIDATE_PATH)).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(authService);
+  }
+
+  private static MockHttpServletRequestBuilder validatePost(String body) {
+    return post(VALIDATE_PATH).contentType(MediaType.APPLICATION_JSON).content(body);
+  }
+
+  private static String validateBody(String token) {
+    return String.format("{\"token\": \"%s\"}", token);
   }
 
   private static MockHttpServletRequestBuilder jsonPost(String body) {

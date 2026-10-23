@@ -28,8 +28,9 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
  * <p>Both answers are written as {@code ProblemDetail} by {@link ProblemDetailSecurityHandler}.
  *
  * <p>The endpoints that hand out tokens are open to everybody, because the caller has no token
- * yet: {@code POST /api/auth/login} and {@code POST /api/auth/refresh}. Each is listed with its
- * HTTP method, so another method on the same path stays closed.
+ * yet: {@code POST /api/auth/login}, {@code POST /api/auth/refresh} and
+ * {@code POST /api/auth/validate}. Each is listed with its HTTP method, so another method on the
+ * same path stays closed.
  *
  * <p>{@code /internal/**} is for other services only. It requires the role
  * {@value InternalKeyAuthenticationFilter#ROLE}, which only {@link InternalKeyAuthenticationFilter}
@@ -77,7 +78,8 @@ public class SecurityConfig {
             UsernamePasswordAuthenticationFilter.class)
         .authorizeHttpRequests(requests -> requests
             .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-            .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/refresh").permitAll()
+            .requestMatchers(HttpMethod.POST,
+                "/api/auth/login", "/api/auth/refresh", "/api/auth/validate").permitAll()
             .requestMatchers("/internal/**").hasRole(InternalKeyAuthenticationFilter.ROLE)
             .anyRequest().denyAll())
         .build();

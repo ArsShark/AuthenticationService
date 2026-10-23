@@ -12,7 +12,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 /**
- * Logs users in and exchanges their refresh tokens for new pairs of tokens.
+ * Logs users in, exchanges their refresh tokens for new pairs of tokens and checks access
+ * tokens.
  *
  * <p>The class has no {@code @Transactional}, on purpose. A login checks the password with
  * BCrypt, which takes tens of milliseconds, and a transaction around that would hold a database
@@ -120,5 +121,22 @@ public class AuthService {
     }
     LOGGER.info("Credential {} refreshed its tokens", claims.credentialId());
     return rotated.get();
+  }
+
+  /**
+   * Checks an access token.
+   *
+   * <p>The checks are those that every service makes when it verifies a token with the public
+   * key: the signature, the issuer, the expiry and the type. The database is not consulted, so
+   * the answer is the same as the one a service gives on its own. A deleted account or a changed
+   * role is noticed only when the token expires, which is at most the lifetime of an access
+   * token.
+   *
+   * @param token the access token as the client sent it, may be garbage
+   * @return the claims of a valid access token, or empty if the token is not a valid access token
+   *     for any reason (a refresh token is not one)
+   */
+  public Optional<AccessTokenClaims> validate(String token) {
+    return tokenService.parseAccessToken(token);
   }
 }
