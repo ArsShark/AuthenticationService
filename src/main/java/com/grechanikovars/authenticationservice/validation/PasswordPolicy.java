@@ -33,7 +33,22 @@ public final class PasswordPolicy {
       return false;
     }
     int length = password.codePointCount(0, password.length());
-    int bytes = password.getBytes(StandardCharsets.UTF_8).length;
-    return length >= MIN_LENGTH && bytes <= MAX_BYTES;
+    return length >= MIN_LENGTH && isWithinBcryptLimit(password);
+  }
+
+  /**
+   * Tells whether BCrypt reads the whole password, that is, whether it has at most
+   * {@value #MAX_BYTES} bytes in UTF-8.
+   *
+   * <p>A login uses this rule alone. It must not apply the rest of the policy, because a weak
+   * password is simply a wrong one and gets the same answer. But it must apply this limit:
+   * BCrypt cuts a longer password silently, so the text "the real password plus anything" would
+   * match the hash of a password of exactly 72 bytes.
+   *
+   * @param password the raw password, may be {@code null}
+   * @return {@code true} if the password has at most 72 bytes; {@code false} for {@code null}
+   */
+  public static boolean isWithinBcryptLimit(String password) {
+    return password != null && password.getBytes(StandardCharsets.UTF_8).length <= MAX_BYTES;
   }
 }

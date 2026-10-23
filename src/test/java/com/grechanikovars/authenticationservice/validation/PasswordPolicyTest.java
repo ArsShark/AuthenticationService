@@ -7,6 +7,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.NullSource;
 
 /**
  * Checks the boundaries of {@link PasswordPolicy}: the minimum in characters, the maximum in
@@ -31,6 +32,36 @@ class PasswordPolicyTest {
   @MethodSource("invalidPasswords")
   void rejectsPasswordsOutsideTheLimits(String password) {
     assertFalse(PasswordPolicy.isValid(password));
+  }
+
+  /** A login applies only the byte limit, so short and even empty passwords are not cut off. */
+  @ParameterizedTest
+  @MethodSource("passwordsBcryptReadsWhole")
+  void bcryptLimitAcceptsEverythingUpToSeventyTwoBytes(String password) {
+    assertTrue(PasswordPolicy.isWithinBcryptLimit(password));
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @MethodSource("passwordsBcryptWouldCut")
+  void bcryptLimitRejectsWhatBcryptWouldSilentlyCut(String password) {
+    assertFalse(PasswordPolicy.isWithinBcryptLimit(password));
+  }
+
+  static Stream<String> passwordsBcryptReadsWhole() {
+    return Stream.of(
+        "",
+        "a",
+        "a".repeat(72),
+        TWO_BYTE_CHAR.repeat(36),
+        FOUR_BYTE_CHAR.repeat(18));
+  }
+
+  static Stream<String> passwordsBcryptWouldCut() {
+    return Stream.of(
+        "a".repeat(73),
+        TWO_BYTE_CHAR.repeat(36).concat("a"),
+        FOUR_BYTE_CHAR.repeat(19));
   }
 
   static Stream<String> validPasswords() {

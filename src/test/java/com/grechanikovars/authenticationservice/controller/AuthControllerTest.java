@@ -1,0 +1,169 @@
+package com.grechanikovars.authenticationservice.controller;
+
+import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.grechanikovars.authenticationservice.config.SecurityConfig;
+import com.grechanikovars.authenticationservice.exception.InvalidCredentialsException;
+import com.grechanikovars.authenticationservice.service.AuthService;
+import com.grechanikovars.authenticationservice.service.IssuedToken;
+import com.grechanikovars.authenticationservice.service.TokenPair;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+
+/**
+ * Tests the HTTP contract of {@link AuthController}: the security chain, the controller, the
+ * validation and the error handler work together; the service is a mock.
+ */
+@WebMvcTest(controllers = AuthController.class,
+    properties = "app.internal.api-key=test-internal-key",
+    excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class)
+@Import(SecurityConfig.class)
+class AuthControllerTest {
+
+  private static final String PATH = "/api/auth/login";
+  private static final String PASSWORD = "s3cret-passw0rd";
+  private static final Instant NOW = Instant.parse("2026-10-19T10:00:00Z");
+
+  private static final String VALID_BODY = """
+      {"login": "Alice@Example.com", "password": "s3cret-passw0rd"}
+      """;
+
+  @Autowired
+  private MockMvc mockMvc;
+
+  @MockitoBean
+  private AuthService authService;
+
+  /** The login is open to everybody: the request carries no key and no token. */
+  @Test
+  void loginReturnsTheTokensAndIsNeverCached() throws Exception {
+    when(authService.login("Alice@Example.com", PASSWORD)).thenReturn(new TokenPair(
+        new IssuedToken("access-token-value", UUID.randomUUID(), NOW,
+            NOW.plus(Duration.ofMinutes(15))),
+        new IssuedToken("refresh-token-value", UUID.randomUUID(), NOW,
+            NOW.plus(Duration.ofDays(7)))));
+
+    mockMvc.perform(jsonPost(VALID_BODY)).andExpectAll(
+        status().isOk(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON),
+        header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")),
+        jsonPath("$.accessToken").value("access-token-value"),
+        jsonPath("$.refreshToken").value("refresh-token-value"),
+        jsonPath("$.tokenType").value("Bearer"),
+        jsonPath("$.expiresIn").value(900));
+
+    verify(authService).login("Alice@Example.com", PASSWORD);
+  }
+
+  @Test
+  void missingFieldsAreBadRequestAndTheServiceIsNotCalled() throws Exception {
+    mockMvc.perform(jsonPost("{}")).andExpectAll(
+        status().isBadRequest(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
+        jsonPath("$.errors.length()").value(2),
+        jsonPath("$.errors[0].field").value("login"),
+        jsonPath("$.errors[1].field").value("password"));
+
+    verifyNoInteractions(authService);
+  }
+
+  @Test
+  void aRejectedValueIsNeverRepeatedInTheAnswer() throws Exception {
+    String tooLong = "p".repeat(1025);
+    String body = String.format("{\"login\": \"alice@example.com\", \"password\": \"%s\"}",
+        tooLong);
+
+    MvcResult result = mockMvc.perform(jsonPost(body))
+        .andExpectAll(
+            status().isBadRequest(),
+            jsonPath("$.errors.length()").value(1),
+            jsonPath("$.errors[0].field").value("password"))
+        .andReturn();
+
+    assertFalse(result.getResponse().getContentAsString(StandardCharsets.UTF_8)
+        .contains(tooLong));
+    verifyNoInteractions(authService);
+  }
+
+  @Test
+  void malformedJsonIsBadRequest() throws Exception {
+    mockMvc.perform(jsonPost("{not json")).andExpectAll(
+        status().isBadRequest(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+    verifyNoInteractions(authService);
+  }
+
+  /** The detail is the constant text of every 401, so it says nothing about the cause. */
+  @Test
+  void failedLoginIsUnauthorizedWithTheConstantDetail() throws Exception {
+    when(authService.login("Alice@Example.com", PASSWORD))
+        .thenThrow(new InvalidCredentialsException());
+
+    MvcResult result = mockMvc.perform(jsonPost(VALID_BODY))
+        .andExpectAll(
+            status().isUnauthorized(),
+            content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
+            header().doesNotExist(HttpHeaders.WWW_AUTHENTICATE),
+            jsonPath("$.status").value(401),
+            jsonPath("$.detail").value("Authentication is required"))
+        .andReturn();
+
+    String response = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
+    assertAll(
+        () -> assertFalse(response.contains(InvalidCredentialsException.MESSAGE)),
+        () -> assertFalse(response.contains("Alice@Example.com")),
+        () -> assertFalse(response.contains(PASSWORD)));
+  }
+
+  @Test
+  void unexpectedErrorIsInternalServerErrorWithoutDetails() throws Exception {
+    when(authService.login("Alice@Example.com", PASSWORD))
+        .thenThrow(new IllegalStateException("secret internal detail"));
+
+    MvcResult result = mockMvc.perform(jsonPost(VALID_BODY))
+        .andExpectAll(
+            status().isInternalServerError(),
+            jsonPath("$.detail").value("An unexpected error occurred"))
+        .andReturn();
+
+    assertFalse(result.getResponse().getContentAsString(StandardCharsets.UTF_8)
+        .contains("secret internal detail"));
+  }
+
+  /** Only POST is opened, so another method on the same path is closed, not "not allowed". */
+  @Test
+  void getIsUnauthorizedBecauseOnlyPostIsOpen() throws Exception {
+    mockMvc.perform(get(PATH)).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(authService);
+  }
+
+  private static MockHttpServletRequestBuilder jsonPost(String body) {
+    return post(PATH).contentType(MediaType.APPLICATION_JSON).content(body);
+  }
+}
