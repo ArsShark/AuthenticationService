@@ -17,6 +17,7 @@ import com.grechanikovars.authenticationservice.TestEntities;
 import com.grechanikovars.authenticationservice.entity.Credential;
 import com.grechanikovars.authenticationservice.entity.Role;
 import com.grechanikovars.authenticationservice.exception.InvalidCredentialsException;
+import com.grechanikovars.authenticationservice.exception.InvalidRefreshTokenException;
 import com.grechanikovars.authenticationservice.repository.CredentialRepository;
 import java.time.Duration;
 import java.time.Instant;
@@ -55,6 +56,9 @@ class AuthServiceTest {
   @Mock
   private RefreshTokenService refreshTokens;
 
+  @Mock
+  private TokenService tokens;
+
   private final Credential account = TestEntities.withDatabaseValues(
       new Credential("alice@example.com", STORED_HASH, Role.USER, USER_ID), CREDENTIAL_ID, NOW);
   private final TokenPair pair = new TokenPair(
@@ -67,7 +71,7 @@ class AuthServiceTest {
   void setUp() {
     // The service hashes a dummy password when it is created.
     when(passwordEncoder.encode(anyString())).thenReturn(DUMMY_HASH);
-    service = new AuthService(credentials, passwordEncoder, refreshTokens);
+    service = new AuthService(credentials, passwordEncoder, refreshTokens, tokens);
   }
 
   @Test
@@ -160,5 +164,60 @@ class AuthServiceTest {
         () -> assertFalse(wrongPassword.getMessage().contains("alice")),
         () -> assertNull(wrongPassword.getCause()),
         () -> assertNull(unknownLogin.getCause()));
+  }
+
+  @Test
+  void refreshReturnsTheNewPairOfTheRotation() {
+    RefreshTokenClaims claims = claimsOf(UUID.randomUUID());
+    when(tokens.parseRefreshToken("refresh-value")).thenReturn(Optional.of(claims));
+    when(refreshTokens.rotate(claims)).thenReturn(Optional.of(pair));
+
+    TokenPair result = service.refresh("refresh-value");
+
+    assertSame(pair, result);
+  }
+
+  /** Garbage, an expired token and an access token never reach the database. */
+  @Test
+  void refreshOfATokenThatIsNotValidIsRefusedWithoutTouchingTheDatabase() {
+    when(tokens.parseRefreshToken("garbage")).thenReturn(Optional.empty());
+
+    assertThrows(InvalidRefreshTokenException.class, () -> service.refresh("garbage"));
+
+    verifyNoInteractions(refreshTokens, credentials);
+  }
+
+  @Test
+  void refreshOfATokenThatTheRotationRefusesIsRefused() {
+    RefreshTokenClaims claims = claimsOf(UUID.randomUUID());
+    when(tokens.parseRefreshToken("used-value")).thenReturn(Optional.of(claims));
+    when(refreshTokens.rotate(claims)).thenReturn(Optional.empty());
+
+    assertThrows(InvalidRefreshTokenException.class, () -> service.refresh("used-value"));
+  }
+
+  /** Both refusals end in the same exception, so the answer cannot show which check failed. */
+  @Test
+  void bothRefusalsOfARefreshLookTheSame() {
+    RefreshTokenClaims claims = claimsOf(UUID.randomUUID());
+    when(tokens.parseRefreshToken("garbage")).thenReturn(Optional.empty());
+    when(tokens.parseRefreshToken("used-value")).thenReturn(Optional.of(claims));
+    when(refreshTokens.rotate(claims)).thenReturn(Optional.empty());
+
+    InvalidRefreshTokenException notValid = assertThrows(InvalidRefreshTokenException.class,
+        () -> service.refresh("garbage"));
+    InvalidRefreshTokenException notUsable = assertThrows(InvalidRefreshTokenException.class,
+        () -> service.refresh("used-value"));
+
+    assertAll(
+        () -> assertEquals(notValid.getMessage(), notUsable.getMessage()),
+        () -> assertEquals(InvalidRefreshTokenException.MESSAGE, notValid.getMessage()),
+        () -> assertFalse(notValid.getMessage().contains("garbage")),
+        () -> assertNull(notValid.getCause()),
+        () -> assertNull(notUsable.getCause()));
+  }
+
+  private RefreshTokenClaims claimsOf(UUID jti) {
+    return new RefreshTokenClaims(CREDENTIAL_ID, jti, NOW.plus(Duration.ofDays(1)));
   }
 }

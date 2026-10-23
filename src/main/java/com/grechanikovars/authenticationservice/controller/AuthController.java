@@ -1,6 +1,7 @@
 package com.grechanikovars.authenticationservice.controller;
 
 import com.grechanikovars.authenticationservice.dto.request.LoginRequest;
+import com.grechanikovars.authenticationservice.dto.request.RefreshRequest;
 import com.grechanikovars.authenticationservice.dto.response.TokenResponse;
 import com.grechanikovars.authenticationservice.service.AuthService;
 import jakarta.validation.Valid;
@@ -38,5 +39,19 @@ public class AuthController {
   public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
     return ResponseEntity.ok(
         TokenResponse.from(authService.login(request.login(), request.password())));
+  }
+
+  /**
+   * Exchanges a refresh token for a new pair of tokens. The used refresh token stops working.
+   *
+   * <p>The response is never cached, for the same reason as the one of the login.
+   *
+   * @param request the refresh token
+   * @return 200 with the new access token and refresh token; 400 for a malformed body; 401, the
+   *     same for every token that cannot be used
+   */
+  @PostMapping("/refresh")
+  public ResponseEntity<TokenResponse> refresh(@Valid @RequestBody RefreshRequest request) {
+    return ResponseEntity.ok(TokenResponse.from(authService.refresh(request.refreshToken())));
   }
 }

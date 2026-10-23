@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.grechanikovars.authenticationservice.config.SecurityConfig;
 import com.grechanikovars.authenticationservice.exception.InvalidCredentialsException;
+import com.grechanikovars.authenticationservice.exception.InvalidRefreshTokenException;
 import com.grechanikovars.authenticationservice.service.AuthService;
 import com.grechanikovars.authenticationservice.service.IssuedToken;
 import com.grechanikovars.authenticationservice.service.TokenPair;
@@ -45,6 +46,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class AuthControllerTest {
 
   private static final String PATH = "/api/auth/login";
+  private static final String REFRESH_PATH = "/api/auth/refresh";
+  private static final String REFRESH_TOKEN = "old-refresh-token";
   private static final String PASSWORD = "s3cret-passw0rd";
   private static final Instant NOW = Instant.parse("2026-10-19T10:00:00Z");
 
@@ -163,7 +166,89 @@ class AuthControllerTest {
     verifyNoInteractions(authService);
   }
 
+  /** The refresh is open to everybody too: the caller has no valid access token yet. */
+  @Test
+  void refreshReturnsTheNewTokensAndIsNeverCached() throws Exception {
+    when(authService.refresh(REFRESH_TOKEN)).thenReturn(new TokenPair(
+        new IssuedToken("new-access-token", UUID.randomUUID(), NOW,
+            NOW.plus(Duration.ofMinutes(15))),
+        new IssuedToken("new-refresh-token", UUID.randomUUID(), NOW,
+            NOW.plus(Duration.ofDays(7)))));
+
+    mockMvc.perform(refreshPost(refreshBody(REFRESH_TOKEN))).andExpectAll(
+        status().isOk(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON),
+        header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")),
+        jsonPath("$.accessToken").value("new-access-token"),
+        jsonPath("$.refreshToken").value("new-refresh-token"),
+        jsonPath("$.tokenType").value("Bearer"),
+        jsonPath("$.expiresIn").value(900));
+
+    verify(authService).refresh(REFRESH_TOKEN);
+  }
+
+  @Test
+  void refreshWithoutATokenIsBadRequestAndTheServiceIsNotCalled() throws Exception {
+    mockMvc.perform(refreshPost("{}")).andExpectAll(
+        status().isBadRequest(),
+        content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
+        jsonPath("$.errors.length()").value(1),
+        jsonPath("$.errors[0].field").value("refreshToken"));
+
+    verifyNoInteractions(authService);
+  }
+
+  @Test
+  void aRejectedRefreshTokenIsNeverRepeatedInTheAnswer() throws Exception {
+    String tooLong = "t".repeat(4097);
+
+    MvcResult result = mockMvc.perform(refreshPost(refreshBody(tooLong)))
+        .andExpectAll(
+            status().isBadRequest(),
+            jsonPath("$.errors.length()").value(1),
+            jsonPath("$.errors[0].field").value("refreshToken"))
+        .andReturn();
+
+    assertFalse(result.getResponse().getContentAsString(StandardCharsets.UTF_8)
+        .contains(tooLong));
+    verifyNoInteractions(authService);
+  }
+
+  @Test
+  void aRefusedRefreshIsUnauthorizedWithTheConstantDetail() throws Exception {
+    when(authService.refresh(REFRESH_TOKEN)).thenThrow(new InvalidRefreshTokenException());
+
+    MvcResult result = mockMvc.perform(refreshPost(refreshBody(REFRESH_TOKEN)))
+        .andExpectAll(
+            status().isUnauthorized(),
+            content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
+            header().doesNotExist(HttpHeaders.WWW_AUTHENTICATE),
+            jsonPath("$.status").value(401),
+            jsonPath("$.detail").value("Authentication is required"))
+        .andReturn();
+
+    String response = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
+    assertAll(
+        () -> assertFalse(response.contains(InvalidRefreshTokenException.MESSAGE)),
+        () -> assertFalse(response.contains(REFRESH_TOKEN)));
+  }
+
+  @Test
+  void getOnTheRefreshPathIsUnauthorizedBecauseOnlyPostIsOpen() throws Exception {
+    mockMvc.perform(get(REFRESH_PATH)).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(authService);
+  }
+
   private static MockHttpServletRequestBuilder jsonPost(String body) {
     return post(PATH).contentType(MediaType.APPLICATION_JSON).content(body);
+  }
+
+  private static MockHttpServletRequestBuilder refreshPost(String body) {
+    return post(REFRESH_PATH).contentType(MediaType.APPLICATION_JSON).content(body);
+  }
+
+  private static String refreshBody(String token) {
+    return String.format("{\"refreshToken\": \"%s\"}", token);
   }
 }

@@ -2,6 +2,7 @@ package com.grechanikovars.authenticationservice.service;
 
 import com.grechanikovars.authenticationservice.entity.Credential;
 import com.grechanikovars.authenticationservice.exception.InvalidCredentialsException;
+import com.grechanikovars.authenticationservice.exception.InvalidRefreshTokenException;
 import com.grechanikovars.authenticationservice.repository.CredentialRepository;
 import com.grechanikovars.authenticationservice.validation.PasswordPolicy;
 import java.util.Optional;
@@ -11,13 +12,18 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 /**
- * Logs users in.
+ * Logs users in and exchanges their refresh tokens for new pairs of tokens.
  *
  * <p>The class has no {@code @Transactional}, on purpose. A login checks the password with
  * BCrypt, which takes tens of milliseconds, and a transaction around that would hold a database
  * connection the whole time; with a pool of ten connections a few parallel logins would starve
  * every other request. Each database call here runs in its own short transaction: the account is
- * read by the repository, and the new tokens are stored by {@link RefreshTokenService}.
+ * read by the repository, and the tokens are stored and rotated by {@link RefreshTokenService}.
+ *
+ * <p>For a refresh the missing transaction matters in another way: {@code rotate} commits its own
+ * transaction, including the revocation of the whole account after a reuse, and only then does
+ * this class turn the empty result into an exception. An exception thrown inside a transaction
+ * would roll the revocation back.
  *
  * <p>Neither the login, nor the password, nor a token is ever logged: only ids.
  */
@@ -32,6 +38,7 @@ public class AuthService {
   private final CredentialRepository credentialRepository;
   private final PasswordEncoder passwordEncoder;
   private final RefreshTokenService refreshTokenService;
+  private final TokenService tokenService;
 
   /**
    * A hash made by the same encoder as the real ones, so comparing with it costs the same.
@@ -40,10 +47,11 @@ public class AuthService {
   private final String dummyHash;
 
   public AuthService(CredentialRepository credentialRepository, PasswordEncoder passwordEncoder,
-      RefreshTokenService refreshTokenService) {
+      RefreshTokenService refreshTokenService, TokenService tokenService) {
     this.credentialRepository = credentialRepository;
     this.passwordEncoder = passwordEncoder;
     this.refreshTokenService = refreshTokenService;
+    this.tokenService = tokenService;
     this.dummyHash = passwordEncoder.encode(DUMMY_PASSWORD);
   }
 
@@ -81,5 +89,36 @@ public class AuthService {
     TokenPair pair = refreshTokenService.issuePair(account.get());
     LOGGER.info("Credential {} logged in", account.get().getId());
     return pair;
+  }
+
+  /**
+   * Exchanges a refresh token for a new pair of tokens.
+   *
+   * <p>The token is checked first without the database: the signature, the issuer, the expiry
+   * and the type, so garbage, an expired token and an access token are refused at once and
+   * change nothing. Then {@link RefreshTokenService#rotate} decides in the database whether the
+   * token can still be used.
+   *
+   * <p>Every refusal ends in the same exception, whatever the cause, so the answer does not
+   * show which check failed.
+   *
+   * @param refreshToken the refresh token as the client sent it
+   * @return the new access token and refresh token; the used refresh token is revoked
+   * @throws InvalidRefreshTokenException if the token is not valid or cannot be used
+   */
+  public TokenPair refresh(String refreshToken) {
+    Optional<RefreshTokenClaims> parsed = tokenService.parseRefreshToken(refreshToken);
+    if (parsed.isEmpty()) {
+      LOGGER.info("Refresh failed: not a valid refresh token");
+      throw new InvalidRefreshTokenException();
+    }
+    RefreshTokenClaims claims = parsed.get();
+    Optional<TokenPair> rotated = refreshTokenService.rotate(claims);
+    if (rotated.isEmpty()) {
+      LOGGER.info("Refresh refused for credential {}", claims.credentialId());
+      throw new InvalidRefreshTokenException();
+    }
+    LOGGER.info("Credential {} refreshed its tokens", claims.credentialId());
+    return rotated.get();
   }
 }
