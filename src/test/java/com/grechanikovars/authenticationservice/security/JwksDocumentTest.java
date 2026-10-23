@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.grechanikovars.authenticationservice.TestKeys;
 import com.grechanikovars.authenticationservice.config.JwtConfig;
 import com.grechanikovars.authenticationservice.config.JwtProperties;
-import com.grechanikovars.authenticationservice.integration.MutableClock;
 import java.math.BigInteger;
 import java.security.KeyFactory;
 import java.security.interfaces.RSAPublicKey;
