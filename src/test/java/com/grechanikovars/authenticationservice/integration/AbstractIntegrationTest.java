@@ -1,5 +1,6 @@
 package com.grechanikovars.authenticationservice.integration;
 
+import com.grechanikovars.authenticationservice.TestKeys;
 import com.grechanikovars.authenticationservice.TestcontainersConfiguration;
 import java.time.Instant;
 import java.util.Objects;
@@ -12,6 +13,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -23,7 +26,9 @@ import org.springframework.test.web.servlet.MockMvc;
  * would create a new context and a new container. The properties of the context are set in the
  * {@code @SpringBootTest} annotation of this class, for all subclasses at once; the first admin
  * is switched off there, so an {@code ADMIN_LOGIN} in the environment of a developer cannot change
- * a test. Tests are not
+ * a test. The signing key of the tokens cannot be a constant of an annotation, because it is
+ * generated at runtime; it is set by {@link #jwtProperties(DynamicPropertyRegistry)} for the same
+ * shared context. Tests are not
  * {@code @Transactional}, so they see real commits; {@link #resetState()} cleans up before every
  * test.
  */
@@ -52,6 +57,17 @@ public abstract class AbstractIntegrationTest {
 
   @Autowired
   protected MutableClock clock;
+
+  /**
+   * Gives the shared context the signing key of the tokens, generated once per test run.
+   *
+   * <p>Every subclass inherits this method, so all of them have the same set of properties and
+   * share one context.
+   */
+  @DynamicPropertySource
+  static void jwtProperties(DynamicPropertyRegistry registry) {
+    registry.add("app.jwt.private-key", () -> TestKeys.PRIVATE_KEY_BASE64);
+  }
 
   @BeforeEach
   void resetState() {

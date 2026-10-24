@@ -110,7 +110,14 @@ public class CredentialService {
     LOGIN_TAKEN_BY_USER
   }
 
-  private static String normalize(String login) {
+  /**
+   * Strips a login and makes it lowercase. Registration stores logins in this form and the login
+   * of the authentication service looks them up in it, so both must use this one method.
+   *
+   * @param login a raw login, not {@code null}
+   * @return the form in which logins are stored
+   */
+  static String normalize(String login) {
     return login.strip().toLowerCase(Locale.ROOT);
   }
 }

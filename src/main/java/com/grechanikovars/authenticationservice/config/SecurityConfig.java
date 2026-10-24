@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -25,6 +26,12 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
  * and never reaches Spring MVC: an anonymous caller gets 401, an authenticated one 403.
  *
  * <p>Both answers are written as {@code ProblemDetail} by {@link ProblemDetailSecurityHandler}.
+ *
+ * <p>The endpoints that hand out tokens are open to everybody, because the caller has no token
+ * yet: {@code POST /api/auth/login}, {@code POST /api/auth/refresh} and
+ * {@code POST /api/auth/validate}. So is the key that verifies them,
+ * {@code GET /.well-known/jwks.json}, because a public key is not a secret. Each is listed with
+ * its HTTP method, so another method on the same path stays closed.
  *
  * <p>{@code /internal/**} is for other services only. It requires the role
  * {@value InternalKeyAuthenticationFilter#ROLE}, which only {@link InternalKeyAuthenticationFilter}
@@ -72,6 +79,9 @@ public class SecurityConfig {
             UsernamePasswordAuthenticationFilter.class)
         .authorizeHttpRequests(requests -> requests
             .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+            .requestMatchers(HttpMethod.POST,
+                "/api/auth/login", "/api/auth/refresh", "/api/auth/validate").permitAll()
+            .requestMatchers(HttpMethod.GET, "/.well-known/jwks.json").permitAll()
             .requestMatchers("/internal/**").hasRole(InternalKeyAuthenticationFilter.ROLE)
             .anyRequest().denyAll())
         .build();
