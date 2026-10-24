@@ -11,13 +11,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.grechanikovars.authenticationservice.exception.LoginAlreadyExistsException;
 import com.grechanikovars.authenticationservice.exception.UserCredentialAlreadyExistsException;
-import com.grechanikovars.authenticationservice.security.InternalKeyInterceptor;
+import com.grechanikovars.authenticationservice.security.InternalKeyAuthenticationFilter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -125,7 +124,7 @@ class CredentialRegistrationIntegrationTest extends AbstractIntegrationTest {
   @Test
   void wrongKeyIsUnauthorizedAndNothingIsWritten() throws Exception {
     mockMvc.perform(request("alice@example.com", PASSWORD, 7L)
-        .header(InternalKeyInterceptor.HEADER, "wrong-key"))
+        .header(InternalKeyAuthenticationFilter.HEADER, "wrong-key"))
         .andExpect(status().isUnauthorized());
 
     assertEquals(0, countAccounts());
@@ -165,7 +164,7 @@ class CredentialRegistrationIntegrationTest extends AbstractIntegrationTest {
   /** Sends a registration with the right internal key. */
   private ResultActions register(String login, String password, long userId) throws Exception {
     return mockMvc.perform(
-        request(login, password, userId).header(InternalKeyInterceptor.HEADER, internalKey));
+        request(login, password, userId).header(InternalKeyAuthenticationFilter.HEADER, internalKey));
   }
 
   /** Builds a registration request without the internal key. */
@@ -191,7 +190,7 @@ class CredentialRegistrationIntegrationTest extends AbstractIntegrationTest {
       List<Callable<Integer>> tasks = IntStream.range(0, PARALLEL_REQUESTS)
           .<Callable<Integer>>mapToObj(i -> () -> {
             MockHttpServletRequestBuilder request =
-                requestFor.apply(i).header(InternalKeyInterceptor.HEADER, internalKey);
+                requestFor.apply(i).header(InternalKeyAuthenticationFilter.HEADER, internalKey);
             barrier.await();
             return mockMvc.perform(request).andReturn().getResponse().getStatus();
           })
@@ -204,10 +203,5 @@ class CredentialRegistrationIntegrationTest extends AbstractIntegrationTest {
     } finally {
       executor.shutdownNow();
     }
-  }
-
-  private int countAccounts() {
-    return Objects.requireNonNull(
-        jdbcTemplate.queryForObject("SELECT count(*) FROM credentials", Integer.class));
   }
 }

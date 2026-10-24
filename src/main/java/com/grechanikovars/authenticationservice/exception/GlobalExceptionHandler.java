@@ -13,6 +13,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -27,11 +29,18 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
  * (malformed JSON, wrong method, unknown path) use the same format. Responses and logs never
  * contain rejected values or the messages of unexpected exceptions: they may hold a login or a
  * password hash.
+ *
+ * <p>The security exceptions are answered here too. Those of the filter chain get here through
+ * {@code ProblemDetailSecurityHandler}; those thrown inside a controller arrive directly, and
+ * without explicit handlers the catch-all would turn them into a 500.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   private static final Logger LOGGER = LogManager.getLogger(GlobalExceptionHandler.class);
+
+  private static final String AUTHENTICATION_REQUIRED = "Authentication is required";
+  private static final String ACCESS_DENIED = "Access is denied";
 
   /** The UNIQUE constraints of the database and the detail for the client when one is violated. */
   private static final Map<String, String> UNIQUE_CONSTRAINT_DETAILS = Map.of(
@@ -51,14 +60,28 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   }
 
   /**
-   * Handles a missing or wrong internal key.
+   * Handles a caller that is not authenticated.
    *
-   * @param ex the rejection of the interceptor
+   * <p>The detail is a constant and never says why: a missing and a wrong credential look the
+   * same, and the message of the exception is not sent.
+   *
+   * @param ex the security exception
    * @return 401
    */
-  @ExceptionHandler(InvalidInternalKeyException.class)
-  public ResponseEntity<ProblemDetail> handleInvalidInternalKey(InvalidInternalKeyException ex) {
-    return reject(HttpStatus.UNAUTHORIZED, ex.getMessage(), ex);
+  @ExceptionHandler(AuthenticationException.class)
+  public ResponseEntity<ProblemDetail> handleAuthentication(AuthenticationException ex) {
+    return reject(HttpStatus.UNAUTHORIZED, AUTHENTICATION_REQUIRED, ex);
+  }
+
+  /**
+   * Handles an authenticated caller that has no right to the resource.
+   *
+   * @param ex the security exception
+   * @return 403
+   */
+  @ExceptionHandler(AccessDeniedException.class)
+  public ResponseEntity<ProblemDetail> handleAccessDenied(AccessDeniedException ex) {
+    return reject(HttpStatus.FORBIDDEN, ACCESS_DENIED, ex);
   }
 
   /**
