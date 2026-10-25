@@ -4,14 +4,14 @@ Part of the e-commerce microservice application (Innowise Java Advanced course).
 The service stores user credentials, logs users in and issues, refreshes and validates JWT
 tokens. It also publishes the public key that the other services use to verify the tokens.
 
-**Status:** accounts, login, refresh, validation and the public key (JWKS) are ready. The Docker
-image and Compose file come with the containerization pull request; the User Service and the API
-Gateway start to use the tokens in their own pull requests.
+**Status:** accounts, login, refresh, validation and the public key (JWKS) are ready, and the
+service runs in Docker (Dockerfile and Compose file). User Service already verifies the tokens;
+the API Gateway starts to use them in its own pull request.
 
 ## Requirements
 
 - JDK 21
-- Docker (local database and integration tests)
+- Docker (local database, Docker Compose and integration tests)
 - OpenSSL, or PowerShell 7, to generate the signing key (see below)
 
 ## Configuration
@@ -22,9 +22,9 @@ All settings are environment variables.
 |---|---|---|
 | `SERVER_PORT` | `8081` | HTTP port |
 | `LOG_DIR` | `logs` | Directory of the log files |
-| `DB_HOST` | `localhost` | Database host (default of the `local` profile) |
-| `DB_PORT` | `5434` | Database port (default of the `local` profile) |
-| `DB_NAME` | `auth_service_db` | Database name (default of the `local` profile) |
+| `DB_HOST` | `localhost` (`local`), `postgres` (`docker`) | Database host |
+| `DB_PORT` | `5434` (`local`), `5432` (`docker`) | Database port |
+| `DB_NAME` | `auth_service_db` | Database name |
 | `DB_USERNAME` | none, required | Database user |
 | `DB_PASSWORD` | none, required | Database password |
 | `INTERNAL_API_KEY` | none, required | Shared key of the internal endpoints; the service does not start without it |
@@ -35,8 +35,15 @@ All settings are environment variables.
 | `ADMIN_LOGIN` | empty | Login (an email) of the first admin, see below |
 | `ADMIN_PASSWORD` | empty | Password of the first admin, see below |
 
-The profile `local` is active by default and holds only the connection defaults. Credentials and
-keys are never stored in the repository. The `docker` profile comes with containerization.
+### Spring profiles
+
+| Profile  | How it is selected                                      | Config file              | PostgreSQL host by default |
+|----------|---------------------------------------------------------|--------------------------|----------------------------|
+| `local`  | default, used when no profile is set                    | `application-local.yml`  | `localhost`, port `5434`   |
+| `docker` | `SPRING_PROFILES_ACTIVE=docker` (set by Docker Compose) | `application-docker.yml` | `postgres` (the Compose service name), port `5432` |
+
+The profile files contain only the datasource URL. Credentials and keys are never stored in them
+or anywhere else in the repository. Every value can be overridden by an environment variable.
 
 ### The signing key
 
@@ -101,6 +108,73 @@ export ADMIN_LOGIN=admin@example.com ADMIN_PASSWORD=<at least 8 characters>
 
 Environment variables set with `$env:` live only in the current PowerShell tab. The service writes
 logs to the `logs/` folder.
+
+## Run with Docker
+
+### In a Docker container
+
+The image is built from the multi-stage `Dockerfile`: the first stage builds the jar with the
+Maven Wrapper (tests are skipped, they are run separately), the second stage contains only a JRE
+and the jar. The application runs as a non-root user and writes its logs to `/app/logs`. No key
+or password is baked into the image: the signing key is read only when the application starts.
+
+This example uses the PostgreSQL container from "Run locally" (it must be running:
+`docker start auth-service-db`) and the variables of that section set in the current shell
+(`JWT_PRIVATE_KEY` is generated as shown in "The signing key"):
+
+```powershell
+docker build -t authentication-service:dev .
+
+docker run --rm --name authentication-service -p 8081:8081 `
+  -e SPRING_PROFILES_ACTIVE=docker `
+  -e DB_HOST=host.docker.internal -e DB_PORT=5434 `
+  -e DB_USERNAME -e DB_PASSWORD -e INTERNAL_API_KEY -e JWT_PRIVATE_KEY `
+  authentication-service:dev
+```
+
+`-e DB_USERNAME` without a value passes the variable from the current shell, so the password and
+the key stay out of the command line. Stop the service started from the IDE first: both use
+port 8081.
+
+### With Docker Compose
+
+`docker-compose.yml` starts the application (built from this repository) and PostgreSQL 18.
+
+```powershell
+Copy-Item .env.example .env
+# set DB_USERNAME, DB_PASSWORD, INTERNAL_API_KEY and JWT_PRIVATE_KEY in .env
+# (the file is ignored by Git)
+docker compose up --build -d
+docker compose ps
+```
+
+`JWT_PRIVATE_KEY` goes into `.env` as one line, without quotes (generate it as shown in "The
+signing key"). The placeholder `change-me` is not valid base64 on purpose, so the service refuses
+to start until it is replaced. `DB_USERNAME`, `DB_PASSWORD`, `INTERNAL_API_KEY` and
+`JWT_PRIVATE_KEY` are required: Compose stops with a message if one is empty. To create the first
+admin, set `ADMIN_LOGIN` and `ADMIN_PASSWORD` in `.env` (both or neither, see "First admin"); put
+a password that contains `$` or `#` in single quotes.
+
+The service is available at http://localhost:8081. PostgreSQL is reachable only inside the Compose
+network (its port is not published); the application waits for its health check. Variables set in
+the shell win over `.env`. The data lives in the volume `postgres-data` and the logs in
+`app-logs`, so both survive `docker compose down`.
+
+User Service runs in its own Compose project and reaches this service through the host: its
+`AUTH_JWKS_URI` is `http://host.docker.internal:8081/.well-known/jwks.json`. In the Compose file
+of the whole system the service is called `authentication-service` instead.
+
+Useful commands:
+
+```powershell
+docker compose logs app --tail 50                 # application log
+docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+docker compose down                                # stop, keep the data
+docker compose down -v                             # stop and delete the data volumes
+```
+
+Do not paste the output of `docker compose config` anywhere: it prints the secrets. To only
+validate the files, use `docker compose config --quiet`.
 
 ## Database
 
@@ -374,6 +448,20 @@ so another method on the same path stays closed.
   noticed at the next refresh.
 - There is no key rotation: one key is published. A new key invalidates all tokens.
 - Expired refresh tokens stay in the table.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|---------|---------------|
+| Compose stops with `<VARIABLE> is required, see .env.example` | `.env` is missing or the variable is empty: copy `.env.example` to `.env` and set it |
+| The application exits with `JWT_PRIVATE_KEY is not valid base64 on one line` | The key is still the placeholder or was split into several lines: generate it as shown in "The signing key" |
+| The application exits with `Set both ADMIN_LOGIN and ADMIN_PASSWORD, or neither` | Only one of the two is set: set both or empty both |
+| `Connection refused` to `host.docker.internal:5434` | The PostgreSQL container is stopped: `docker start auth-service-db` |
+| `UnknownHostException: postgres` outside Docker | The `docker` profile is active, but there is no Compose network: unset `SPRING_PROFILES_ACTIVE` or set `DB_HOST` |
+| `password authentication failed` after `DB_PASSWORD` was changed in `.env` | PostgreSQL takes the password only when the volume is empty: `docker compose down -v` (this deletes the data) |
+| A change in `.env` has no effect | A variable of the same name is set in the shell and wins over `.env` |
+| Port 8081 is already in use | Stop the service started from the IDE or the other container |
+| `curl` fails with `Failed to connect to 127.0.0.1 port <unusual port>` while the container runs | The shell has an `http_proxy` variable, so requests to `localhost` go to a proxy: `curl.exe --noproxy "*" ...` |
 
 ## Tests
 
