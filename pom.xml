@@ -29,7 +29,7 @@
 	<properties>
 		<java.version>21</java.version>
 		<!-- Default of the late replacement @{argLine} in the surefire configuration below. It must
-		     stay empty: a JaCoCo agent, if added later, fills the same property. -->
+		     stay empty: the JaCoCo agent (prepare-agent) fills the same property. -->
 		<argLine></argLine>
 	</properties>
 	<dependencies>
@@ -212,6 +212,29 @@
 						</exclude>
 					</excludes>
 				</configuration>
+			</plugin>
+			<plugin>
+				<!-- Coverage report in target/site/jacoco/ (html, xml, csv). The version is pinned: Spring
+				     Boot does not manage it. The report is written in the test phase; there is no
+				     threshold. -->
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.15</version>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>test</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+				</executions>
 			</plugin>
 		</plugins>
 	</build>
