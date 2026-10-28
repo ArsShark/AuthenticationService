@@ -3,6 +3,7 @@ package com.grechanikovars.authenticationservice.service;
 import com.grechanikovars.authenticationservice.dto.response.CredentialResponse;
 import com.grechanikovars.authenticationservice.entity.Credential;
 import com.grechanikovars.authenticationservice.entity.Role;
+import com.grechanikovars.authenticationservice.exception.CredentialNotFoundException;
 import com.grechanikovars.authenticationservice.exception.LoginAlreadyExistsException;
 import com.grechanikovars.authenticationservice.exception.UserCredentialAlreadyExistsException;
 import com.grechanikovars.authenticationservice.repository.CredentialRepository;
@@ -95,6 +96,27 @@ public class CredentialService {
     Credential saved = credentialRepository.saveAndFlush(credential);
     LOGGER.info("Admin credential {} created", saved.getId());
     return AdminResult.CREATED;
+  }
+
+  /**
+   * Deletes the account of a user profile, with its refresh tokens. The Gateway calls it to undo a
+   * registration whose last step failed: the profile in User Service is removed too, so no
+   * account may be left without a profile.
+   *
+   * <p>Only an account with the role {@link Role#USER} is deleted, never an admin. The call is
+   * meant to be repeated safely: an account that is already gone is a
+   * {@link CredentialNotFoundException}, which the caller treats as "nothing to undo".
+   *
+   * @param userId the id of the profile in User Service
+   * @throws CredentialNotFoundException if the profile has no account
+   */
+  @Transactional
+  public void deleteByUserId(Long userId) {
+    long deleted = credentialRepository.deleteByUserIdAndRole(userId, Role.USER);
+    if (deleted == 0) {
+      throw new CredentialNotFoundException();
+    }
+    LOGGER.info("Credential of user {} deleted", userId);
   }
 
   /** The outcome of {@link #createAdminIfAbsent(String, String)}. */

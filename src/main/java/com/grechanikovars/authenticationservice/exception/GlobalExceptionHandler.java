@@ -60,6 +60,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   }
 
   /**
+   * Handles a profile that has no account.
+   *
+   * @param ex the rejection of the service
+   * @return 404
+   */
+  @ExceptionHandler(CredentialNotFoundException.class)
+  public ResponseEntity<ProblemDetail> handleNotFound(CredentialNotFoundException ex) {
+    return reject(HttpStatus.NOT_FOUND, ex.getMessage(), ex);
+  }
+
+  /**
    * Handles a caller that is not authenticated.
    *
    * <p>The detail is a constant and never says why: a missing and a wrong credential look the

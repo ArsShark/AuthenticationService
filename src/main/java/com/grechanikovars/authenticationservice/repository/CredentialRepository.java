@@ -1,6 +1,7 @@
 package com.grechanikovars.authenticationservice.repository;
 
 import com.grechanikovars.authenticationservice.entity.Credential;
+import com.grechanikovars.authenticationservice.entity.Role;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -32,4 +33,17 @@ public interface CredentialRepository extends JpaRepository<Credential, Long> {
    * @param userId the id of the profile in User Service
    */
   boolean existsByUserId(Long userId);
+
+  /**
+   * Deletes the accounts of a user profile that have the given role. The refresh tokens of the
+   * account go with it: the foreign key of {@code refresh_tokens} is {@code ON DELETE CASCADE}.
+   *
+   * <p>The caller must provide a transaction. The role is a parameter, so a caller that passes
+   * {@link Role#USER} can never delete an admin.
+   *
+   * @param userId the id of the profile in User Service
+   * @param role the role of the accounts to delete
+   * @return the number of deleted accounts (0 or 1: the user id is unique)
+   */
+  long deleteByUserIdAndRole(Long userId, Role role);
 }
