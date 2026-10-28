@@ -6,6 +6,8 @@ import com.grechanikovars.authenticationservice.service.CredentialService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -44,5 +46,20 @@ public class CredentialController {
     CredentialResponse response =
         credentialService.register(request.login(), request.password(), request.userId());
     return ResponseEntity.status(HttpStatus.CREATED).body(response);
+  }
+
+  /**
+   * Deletes the account of a user profile. It undoes {@link #register}: the Gateway calls it when
+   * a registration fails after the profile was created, and again, safely, when it does not know
+   * whether the account was created.
+   *
+   * @param userId the id of the profile in User Service
+   * @return 204 when the account was deleted; 401 for a wrong internal key; 404 when the profile
+   *     has no account (for example because the call is a repetition)
+   */
+  @DeleteMapping("/by-user/{userId}")
+  public ResponseEntity<Void> deleteByUserId(@PathVariable Long userId) {
+    credentialService.deleteByUserId(userId);
+    return ResponseEntity.noContent().build();
   }
 }

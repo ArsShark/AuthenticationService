@@ -1,5 +1,8 @@
 package com.grechanikovars.authenticationservice.service;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -14,6 +17,7 @@ import com.grechanikovars.authenticationservice.TestEntities;
 import com.grechanikovars.authenticationservice.dto.response.CredentialResponse;
 import com.grechanikovars.authenticationservice.entity.Credential;
 import com.grechanikovars.authenticationservice.entity.Role;
+import com.grechanikovars.authenticationservice.exception.CredentialNotFoundException;
 import com.grechanikovars.authenticationservice.exception.LoginAlreadyExistsException;
 import com.grechanikovars.authenticationservice.exception.UserCredentialAlreadyExistsException;
 import com.grechanikovars.authenticationservice.repository.CredentialRepository;
@@ -174,5 +178,22 @@ class CredentialServiceTest {
   private void stubSaveAndFlush() {
     when(credentialRepository.saveAndFlush(any(Credential.class))).thenAnswer(invocation ->
         TestEntities.withDatabaseValues(invocation.getArgument(0), CREDENTIAL_ID, CREATED_AT));
+  }
+
+  @Test
+  void deleteByUserIdDeletesTheAccountOfAUserAndNeverOfAnAdmin() {
+    when(credentialRepository.deleteByUserIdAndRole(USER_ID, Role.USER)).thenReturn(1L);
+
+    service.deleteByUserId(USER_ID);
+
+    verify(credentialRepository).deleteByUserIdAndRole(USER_ID, Role.USER);
+    verifyNoMoreInteractions(credentialRepository);
+  }
+
+  @Test
+  void deleteByUserIdOfAProfileWithoutAnAccountIsNotFound() {
+    when(credentialRepository.deleteByUserIdAndRole(USER_ID, Role.USER)).thenReturn(0L);
+
+    assertThrows(CredentialNotFoundException.class, () -> service.deleteByUserId(USER_ID));
   }
 }

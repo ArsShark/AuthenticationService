@@ -1,5 +1,8 @@
 package com.grechanikovars.authenticationservice.controller;
 
+import static org.mockito.Mockito.doThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.verify;
@@ -15,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.grechanikovars.authenticationservice.config.SecurityConfig;
 import com.grechanikovars.authenticationservice.dto.response.CredentialResponse;
 import com.grechanikovars.authenticationservice.entity.Role;
+import com.grechanikovars.authenticationservice.exception.CredentialNotFoundException;
 import com.grechanikovars.authenticationservice.exception.LoginAlreadyExistsException;
 import com.grechanikovars.authenticationservice.exception.UserCredentialAlreadyExistsException;
 import com.grechanikovars.authenticationservice.security.InternalKeyAuthenticationFilter;
@@ -45,6 +49,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class CredentialControllerTest {
 
   private static final String PATH = "/internal/credentials";
+  private static final String DELETE_PATH = "/internal/credentials/by-user/{userId}";
   private static final String KEY = "test-internal-key";
   private static final String PASSWORD = "s3cret-passw0rd";
 
@@ -200,5 +205,40 @@ class CredentialControllerTest {
 
   private static MockHttpServletRequestBuilder jsonPost(String body) {
     return post(PATH).contentType(MediaType.APPLICATION_JSON).content(body);
+  }
+
+  @Test
+  void deleteByUserIdReturns204AndCallsTheService() throws Exception {
+    mockMvc.perform(delete(DELETE_PATH, 7L).header(InternalKeyAuthenticationFilter.HEADER, KEY))
+        .andExpectAll(status().isNoContent(), content().string(""));
+
+    verify(credentialService).deleteByUserId(7L);
+  }
+
+  @Test
+  void deleteByUserIdOfAProfileWithoutAnAccountIsA404Problem() throws Exception {
+    doThrow(new CredentialNotFoundException()).when(credentialService).deleteByUserId(7L);
+
+    mockMvc.perform(delete(DELETE_PATH, 7L).header(InternalKeyAuthenticationFilter.HEADER, KEY))
+        .andExpectAll(
+            status().isNotFound(),
+            content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON),
+            jsonPath("$.status").value(404),
+            jsonPath("$.detail").value("No account exists for this user"));
+  }
+
+  @Test
+  void deleteByUserIdWithoutTheKeyIsUnauthorizedAndNothingIsDeleted() throws Exception {
+    mockMvc.perform(delete(DELETE_PATH, 7L)).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(credentialService);
+  }
+
+  @Test
+  void deleteByUserIdWithAnIdThatIsNotANumberIsA400() throws Exception {
+    mockMvc.perform(delete(DELETE_PATH, "abc").header(InternalKeyAuthenticationFilter.HEADER, KEY))
+        .andExpect(status().isBadRequest());
+
+    verifyNoInteractions(credentialService);
   }
 }
