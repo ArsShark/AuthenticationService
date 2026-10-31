@@ -25,7 +25,7 @@ import org.springframework.stereotype.Service;
  * It does not log either: a token is a credential, and the callers log what happened with ids
  * only.
  *
- * <p>The claims of an access token are {@code sub} (the id of the account), {@code userId} (the
+ * <p>The claims of an access token are {@code sub} (the id of the account), {@code user_id} (the
  * id of the profile in User Service; absent for an admin that has none), {@code role},
  * {@code email} (the login), {@code jti}, {@code iss}, {@code iat}, {@code exp} and
  * {@code token_type}. A refresh token has only {@code sub}, {@code jti}, {@code iss},
@@ -41,7 +41,7 @@ public class TokenService {
   static final String CLAIM_TOKEN_TYPE = "token_type";
   static final String CLAIM_ROLE = "role";
   static final String CLAIM_EMAIL = "email";
-  static final String CLAIM_USER_ID = "userId";
+  static final String CLAIM_USER_ID = "user_id";
 
   private final JwtEncoder encoder;
   private final JwtDecoder decoder;

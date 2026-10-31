@@ -76,7 +76,7 @@ class FullFlowIntegrationTest extends AbstractIntegrationTest {
     assertAll(
         () -> assertEquals(refreshedAt.plus(Duration.ofMinutes(15)), Instant.parse(expiresAt)),
         () -> assertEquals("ADMIN", decoded.getClaimAsString("role")),
-        () -> assertNull(decoded.getClaim("userId")),
+        () -> assertNull(decoded.getClaim("user_id")),
         () -> assertEquals(3, countTokens()),
         () -> assertEquals(1, countActiveTokens()));
   }

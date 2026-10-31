@@ -350,7 +350,7 @@ and there is no clock skew: an expired token is expired.
 | Claim | Access token | Refresh token |
 |---|---|---|
 | `sub` | the id of the account | the id of the account |
-| `userId` | the id of the profile in User Service; absent for an admin without a profile | not present |
+| `user_id` | the id of the profile in User Service; absent for an admin without a profile | not present |
 | `role` | `ADMIN` or `USER` (without a `ROLE_` prefix) | not present |
 | `email` | the login | not present |
 | `jti`, `iss`, `iat`, `exp` | yes | yes |

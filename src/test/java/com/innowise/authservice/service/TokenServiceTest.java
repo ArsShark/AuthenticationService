@@ -50,7 +50,7 @@ class TokenServiceTest {
   private static final String HASH = "x".repeat(60);
 
   private static final Set<String> ACCESS_CLAIMS =
-      Set.of("iss", "sub", "iat", "exp", "jti", "token_type", "role", "email", "userId");
+      Set.of("iss", "sub", "iat", "exp", "jti", "token_type", "role", "email", "user_id");
   private static final Set<String> REFRESH_CLAIMS =
       Set.of("iss", "sub", "iat", "exp", "jti", "token_type");
 
@@ -79,7 +79,7 @@ class TokenServiceTest {
         () -> assertEquals(ACCESS_CLAIMS, jwt.getClaims().keySet()),
         () -> assertEquals(ISSUER, jwt.getClaimAsString("iss")),
         () -> assertEquals("7", jwt.getSubject()),
-        () -> assertEquals(3L, ((Number) jwt.getClaims().get("userId")).longValue()),
+        () -> assertEquals(3L, ((Number) jwt.getClaims().get("user_id")).longValue()),
         () -> assertEquals("USER", jwt.getClaimAsString("role")),
         () -> assertEquals("user@example.com", jwt.getClaimAsString("email")),
         () -> assertEquals("access", jwt.getClaimAsString("token_type")),
@@ -93,7 +93,7 @@ class TokenServiceTest {
     Jwt jwt = decoder.decode(tokens.issueAccessToken(admin).value());
 
     assertAll(
-        () -> assertFalse(jwt.getClaims().containsKey("userId")),
+        () -> assertFalse(jwt.getClaims().containsKey("user_id")),
         () -> assertEquals("ADMIN", jwt.getClaimAsString("role")),
         () -> assertEquals("1", jwt.getSubject()));
   }
@@ -294,9 +294,9 @@ class TokenServiceTest {
         malformed("the subject is negative", b -> b.subject("-5")),
         malformed("the email is missing", b -> b.claims(m -> m.remove("email"))),
         malformed("the email is blank", b -> b.claim("email", "  ")),
-        malformed("the userId is text", b -> b.claim("userId", "3")),
-        malformed("the userId is a fraction", b -> b.claim("userId", 3.5)),
-        malformed("a user has no userId", b -> b.claims(m -> m.remove("userId"))),
+        malformed("the userId is text", b -> b.claim("user_id", "3")),
+        malformed("the userId is a fraction", b -> b.claim("user_id", 3.5)),
+        malformed("a user has no userId", b -> b.claims(m -> m.remove("user_id"))),
         malformed("the token type is missing", b -> b.claims(m -> m.remove("token_type"))),
         malformed("the token type has another case", b -> b.claim("token_type", "ACCESS")));
   }
@@ -351,7 +351,7 @@ class TokenServiceTest {
         .claim("token_type", "access")
         .claim("role", "USER")
         .claim("email", "user@example.com")
-        .claim("userId", 3L);
+        .claim("user_id", 3L);
     return sign(builder, change);
   }
 
