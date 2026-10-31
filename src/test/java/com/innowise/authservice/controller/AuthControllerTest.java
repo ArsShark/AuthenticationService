@@ -17,6 +17,8 @@ import com.innowise.authservice.config.SecurityConfig;
 import com.innowise.authservice.entity.Role;
 import com.innowise.authservice.exception.InvalidCredentialsException;
 import com.innowise.authservice.exception.InvalidRefreshTokenException;
+import com.innowise.authservice.mapper.TokenMapperImpl;
+import com.innowise.authservice.mapper.ValidationMapperImpl;
 import com.innowise.authservice.service.AccessTokenClaims;
 import com.innowise.authservice.service.AuthService;
 import com.innowise.authservice.service.IssuedToken;
@@ -45,7 +47,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 @WebMvcTest(controllers = AuthController.class,
     properties = "app.internal.api-key=test-internal-key",
     excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, TokenMapperImpl.class, ValidationMapperImpl.class})
 class AuthControllerTest {
 
   private static final String PATH = "/api/auth/login";

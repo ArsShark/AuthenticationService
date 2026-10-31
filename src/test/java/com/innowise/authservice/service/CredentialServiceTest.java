@@ -20,6 +20,7 @@ import com.innowise.authservice.entity.Role;
 import com.innowise.authservice.exception.CredentialNotFoundException;
 import com.innowise.authservice.exception.LoginAlreadyExistsException;
 import com.innowise.authservice.exception.UserCredentialAlreadyExistsException;
+import com.innowise.authservice.mapper.CredentialMapperImpl;
 import com.innowise.authservice.repository.CredentialRepository;
 import com.innowise.authservice.service.CredentialService.AdminResult;
 import java.time.Instant;
@@ -59,7 +60,8 @@ class CredentialServiceTest {
 
   @BeforeEach
   void setUp() {
-    service = new CredentialService(credentialRepository, passwordEncoder);
+    service = new CredentialService(credentialRepository, passwordEncoder,
+        new CredentialMapperImpl());
   }
 
   @Test

@@ -1,38 +1,17 @@
 package com.innowise.authservice.dto.response;
 
-import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.innowise.authservice.TestEntities;
-import com.innowise.authservice.entity.Credential;
-import com.innowise.authservice.entity.Role;
 import java.lang.reflect.RecordComponent;
-import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Checks what the public view of an account contains.
+ * Pins what the public view of an account contains. How it is filled is tested in
+ * {@code CredentialMapperTest}.
  */
 class CredentialResponseTest {
-
-  private static final Instant CREATED_AT = Instant.parse("2026-10-19T10:00:00Z");
-
-  @Test
-  void fromCopiesTheFieldsOfTheAccount() {
-    Credential credential = TestEntities.withDatabaseValues(
-        new Credential("alice@example.com", "x".repeat(60), Role.USER, 7L), 42L, CREATED_AT);
-
-    CredentialResponse response = CredentialResponse.from(credential);
-
-    assertAll(
-        () -> assertEquals(42L, response.id()),
-        () -> assertEquals("alice@example.com", response.login()),
-        () -> assertEquals(Role.USER, response.role()),
-        () -> assertEquals(7L, response.userId()),
-        () -> assertEquals(CREATED_AT, response.createdAt()));
-  }
 
   /** A new component here must be a conscious decision: the hash must never be added. */
   @Test

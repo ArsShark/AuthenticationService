@@ -1,8 +1,5 @@
 package com.innowise.authservice.dto.response;
 
-import com.innowise.authservice.service.IssuedToken;
-import com.innowise.authservice.service.TokenPair;
-import java.time.Duration;
 
 /**
  * The answer to a login or a refresh: the two tokens and what a client needs to use them.
@@ -19,19 +16,6 @@ public record TokenResponse(
 
   /** The only token type of the service (RFC 6750). */
   public static final String BEARER = "Bearer";
-
-  /**
-   * Builds the answer from a freshly issued pair.
-   *
-   * @param pair the access token and the refresh token
-   * @return the response; the lifetime is the distance between the issue and the expiry of the
-   *     access token
-   */
-  public static TokenResponse from(TokenPair pair) {
-    IssuedToken access = pair.access();
-    long expiresIn = Duration.between(access.issuedAt(), access.expiresAt()).toSeconds();
-    return new TokenResponse(access.value(), pair.refresh().value(), BEARER, expiresIn);
-  }
 
   /**
    * Describes the response without the tokens.

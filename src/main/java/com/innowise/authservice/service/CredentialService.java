@@ -6,6 +6,7 @@ import com.innowise.authservice.entity.Role;
 import com.innowise.authservice.exception.CredentialNotFoundException;
 import com.innowise.authservice.exception.LoginAlreadyExistsException;
 import com.innowise.authservice.exception.UserCredentialAlreadyExistsException;
+import com.innowise.authservice.mapper.CredentialMapper;
 import com.innowise.authservice.repository.CredentialRepository;
 import java.util.Locale;
 import java.util.Optional;
@@ -29,11 +30,13 @@ public class CredentialService {
 
   private final CredentialRepository credentialRepository;
   private final PasswordEncoder passwordEncoder;
+  private final CredentialMapper credentialMapper;
 
   public CredentialService(CredentialRepository credentialRepository,
-      PasswordEncoder passwordEncoder) {
+      PasswordEncoder passwordEncoder, CredentialMapper credentialMapper) {
     this.credentialRepository = credentialRepository;
     this.passwordEncoder = passwordEncoder;
+    this.credentialMapper = credentialMapper;
   }
 
   /**
@@ -65,7 +68,7 @@ public class CredentialService {
         normalizedLogin, passwordEncoder.encode(password), Role.USER, userId);
     Credential saved = credentialRepository.saveAndFlush(credential);
     LOGGER.info("Credential {} registered for user {}", saved.getId(), saved.getUserId());
-    return CredentialResponse.from(saved);
+    return credentialMapper.toResponse(saved);
   }
 
   /**

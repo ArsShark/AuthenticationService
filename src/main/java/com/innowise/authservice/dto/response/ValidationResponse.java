@@ -2,7 +2,6 @@ package com.innowise.authservice.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.innowise.authservice.entity.Role;
-import com.innowise.authservice.service.AccessTokenClaims;
 import java.time.Instant;
 
 /**
@@ -26,16 +25,6 @@ public record ValidationResponse(boolean valid, Long userId, Role role, Instant 
 
   private static final ValidationResponse INVALID =
       new ValidationResponse(false, null, null, null);
-
-  /**
-   * Describes a valid token.
-   *
-   * @param claims the claims of a token that passed every check
-   * @return the answer with the user, the role and the expiry
-   */
-  public static ValidationResponse of(AccessTokenClaims claims) {
-    return new ValidationResponse(true, claims.userId(), claims.role(), claims.expiresAt());
-  }
 
   /**
    * Describes a token that is not valid, whatever the reason.

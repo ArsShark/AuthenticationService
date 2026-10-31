@@ -1,6 +1,5 @@
 package com.innowise.authservice.dto.response;
 
-import com.innowise.authservice.entity.Credential;
 import com.innowise.authservice.entity.Role;
 import java.time.Instant;
 
@@ -17,15 +16,4 @@ import java.time.Instant;
  */
 public record CredentialResponse(Long id, String login, Role role, Long userId,
     Instant createdAt) {
-
-  /**
-   * Creates the response from an account.
-   *
-   * @param credential a saved account
-   * @return the public view of the account
-   */
-  public static CredentialResponse from(Credential credential) {
-    return new CredentialResponse(credential.getId(), credential.getUsername(),
-        credential.getRole(), credential.getUserId(), credential.getCreatedAt());
-  }
 }

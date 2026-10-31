@@ -5,6 +5,8 @@ import com.innowise.authservice.dto.request.RefreshRequest;
 import com.innowise.authservice.dto.request.ValidateRequest;
 import com.innowise.authservice.dto.response.TokenResponse;
 import com.innowise.authservice.dto.response.ValidationResponse;
+import com.innowise.authservice.mapper.TokenMapper;
+import com.innowise.authservice.mapper.ValidationMapper;
 import com.innowise.authservice.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -22,9 +24,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
   private final AuthService authService;
+  private final TokenMapper tokenMapper;
+  private final ValidationMapper validationMapper;
 
-  public AuthController(AuthService authService) {
+  public AuthController(AuthService authService, TokenMapper tokenMapper,
+      ValidationMapper validationMapper) {
     this.authService = authService;
+    this.tokenMapper = tokenMapper;
+    this.validationMapper = validationMapper;
   }
 
   /**
@@ -40,7 +47,7 @@ public class AuthController {
   @PostMapping("/login")
   public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
     return ResponseEntity.ok(
-        TokenResponse.from(authService.login(request.login(), request.password())));
+        tokenMapper.toResponse(authService.login(request.login(), request.password())));
   }
 
   /**
@@ -54,7 +61,8 @@ public class AuthController {
    */
   @PostMapping("/refresh")
   public ResponseEntity<TokenResponse> refresh(@Valid @RequestBody RefreshRequest request) {
-    return ResponseEntity.ok(TokenResponse.from(authService.refresh(request.refreshToken())));
+    return ResponseEntity.ok(
+        tokenMapper.toResponse(authService.refresh(request.refreshToken())));
   }
 
   /**
@@ -70,7 +78,7 @@ public class AuthController {
   @PostMapping("/validate")
   public ResponseEntity<ValidationResponse> validate(@Valid @RequestBody ValidateRequest request) {
     return ResponseEntity.ok(authService.validate(request.token())
-        .map(ValidationResponse::of)
+        .map(validationMapper::toResponse)
         .orElseGet(ValidationResponse::invalid));
   }
 }
