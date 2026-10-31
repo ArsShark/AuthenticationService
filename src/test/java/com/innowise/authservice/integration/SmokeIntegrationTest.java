@@ -33,11 +33,16 @@ class SmokeIntegrationTest extends AbstractIntegrationTest {
   }
 
   @Test
-  void liquibaseAppliesBothChangeSetsInOrder() {
+  void liquibaseAppliesAllChangeSetsInOrder() {
     List<String> applied = jdbcTemplate.queryForList(
         "SELECT id FROM databasechangelog ORDER BY orderexecuted", String.class);
 
-    assertEquals(List.of("create-credentials-table", "create-refresh-tokens-table"), applied);
+    assertEquals(
+        List.of(
+            "create-credentials-table",
+            "create-refresh-tokens-table",
+            "rename-credentials-login-to-username"),
+        applied);
   }
 
   @Test
