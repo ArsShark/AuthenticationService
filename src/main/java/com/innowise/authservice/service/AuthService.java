@@ -6,8 +6,8 @@ import com.innowise.authservice.exception.InvalidRefreshTokenException;
 import com.innowise.authservice.repository.CredentialRepository;
 import com.innowise.authservice.validation.PasswordPolicy;
 import java.util.Optional;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -31,7 +31,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthService {
 
-  private static final Logger LOGGER = LogManager.getLogger(AuthService.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(AuthService.class);
 
   /** Any text. Its hash is what the password is compared with when the login is unknown. */
   private static final String DUMMY_PASSWORD = "a password that no account has";

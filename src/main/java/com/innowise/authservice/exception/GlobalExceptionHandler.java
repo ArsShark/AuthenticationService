@@ -5,8 +5,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -37,7 +37,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
-  private static final Logger LOGGER = LogManager.getLogger(GlobalExceptionHandler.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
   private static final String AUTHENTICATION_REQUIRED = "Authentication is required";
   private static final String ACCESS_DENIED = "Access is denied";

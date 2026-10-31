@@ -7,8 +7,8 @@ import com.innowise.authservice.repository.RefreshTokenRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class RefreshTokenService {
 
-  private static final Logger LOGGER = LogManager.getLogger(RefreshTokenService.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(RefreshTokenService.class);
 
   private final RefreshTokenRepository refreshTokenRepository;
   private final CredentialRepository credentialRepository;

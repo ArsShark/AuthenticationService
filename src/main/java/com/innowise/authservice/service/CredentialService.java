@@ -9,8 +9,8 @@ import com.innowise.authservice.exception.UserCredentialAlreadyExistsException;
 import com.innowise.authservice.repository.CredentialRepository;
 import java.util.Locale;
 import java.util.Optional;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class CredentialService {
 
-  private static final Logger LOGGER = LogManager.getLogger(CredentialService.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(CredentialService.class);
 
   private final CredentialRepository credentialRepository;
   private final PasswordEncoder passwordEncoder;

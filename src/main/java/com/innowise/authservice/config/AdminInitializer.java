@@ -2,14 +2,14 @@ package com.innowise.authservice.config;
 
 import com.innowise.authservice.dto.request.CredentialRequest;
 import com.innowise.authservice.exception.ViolatedConstraint;
-import com.innowise.authservice.service.CredentialService;
 import com.innowise.authservice.service.CredentialService.AdminResult;
+import com.innowise.authservice.service.CredentialService;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -40,7 +40,7 @@ import org.springframework.stereotype.Component;
 @EnableConfigurationProperties(AdminProperties.class)
 public class AdminInitializer implements ApplicationRunner {
 
-  private static final Logger LOGGER = LogManager.getLogger(AdminInitializer.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(AdminInitializer.class);
 
   private final AdminProperties properties;
   private final CredentialService credentialService;

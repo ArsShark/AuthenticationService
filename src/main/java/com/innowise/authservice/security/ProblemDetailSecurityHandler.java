@@ -3,8 +3,8 @@ package com.innowise.authservice.security;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Objects;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -30,7 +30,7 @@ import org.springframework.web.servlet.ModelAndView;
 public class ProblemDetailSecurityHandler implements AuthenticationEntryPoint,
     AccessDeniedHandler {
 
-  private static final Logger LOGGER = LogManager.getLogger(ProblemDetailSecurityHandler.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(ProblemDetailSecurityHandler.class);
 
   private final HandlerExceptionResolver resolver;
 
