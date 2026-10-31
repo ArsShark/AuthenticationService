@@ -18,7 +18,7 @@ class CredentialConstraintsIntegrationTest extends AbstractIntegrationTest {
     DataIntegrityViolationException error = assertThrows(DataIntegrityViolationException.class,
         () -> insertCredential("a@x.com", "USER", 2L));
 
-    assertEquals("uq_credentials_login", violatedConstraint(error));
+    assertEquals("uq_credentials_username", violatedConstraint(error));
   }
 
   @Test

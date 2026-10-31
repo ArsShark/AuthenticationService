@@ -75,7 +75,7 @@ public class AuthService {
    */
   public TokenPair login(String login, String password) {
     Optional<Credential> account =
-        credentialRepository.findByLogin(CredentialService.normalize(login));
+        credentialRepository.findByUsername(CredentialService.normalize(login));
     String hash = account.map(Credential::getPasswordHash).orElse(dummyHash);
     boolean passwordMatches =
         PasswordPolicy.isWithinBcryptLimit(password) && passwordEncoder.matches(password, hash);

@@ -20,7 +20,7 @@ class SchemaIntegrationTest extends AbstractIntegrationTest {
         () -> assertEquals(
             Set.of(
                 "pk_credentials",
-                "uq_credentials_login",
+                "uq_credentials_username",
                 "uq_credentials_user_id",
                 "ck_credentials_role",
                 "ck_credentials_user_id_required"),
@@ -37,7 +37,7 @@ class SchemaIntegrationTest extends AbstractIntegrationTest {
   void indexesAreTheDocumentedOnes() {
     assertAll(
         () -> assertEquals(
-            Set.of("pk_credentials", "uq_credentials_login", "uq_credentials_user_id"),
+            Set.of("pk_credentials", "uq_credentials_username", "uq_credentials_user_id"),
             indexesOf("credentials")),
         () -> assertEquals(
             Set.of(
@@ -45,6 +45,20 @@ class SchemaIntegrationTest extends AbstractIntegrationTest {
                 "uq_refresh_tokens_jti",
                 "idx_refresh_tokens_credential_id"),
             indexesOf("refresh_tokens")));
+  }
+
+  @Test
+  void theAccountNameIsTheColumnUsername() {
+    Set<String> columns = new HashSet<>(jdbcTemplate.queryForList("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'credentials'
+        """, String.class));
+
+    assertAll(
+        () -> assertEquals(
+            Set.of("id", "username", "password_hash", "role", "user_id", "created_at",
+                "updated_at"),
+            columns));
   }
 
   /** Primary key, unique, check and foreign key constraints (NOT NULL is not included). */

@@ -44,7 +44,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   /** The UNIQUE constraints of the database and the detail for the client when one is violated. */
   private static final Map<String, String> UNIQUE_CONSTRAINT_DETAILS = Map.of(
-      ViolatedConstraint.UNIQUE_LOGIN, LoginAlreadyExistsException.MESSAGE,
+      ViolatedConstraint.UNIQUE_USERNAME, LoginAlreadyExistsException.MESSAGE,
       ViolatedConstraint.UNIQUE_USER_ID, UserCredentialAlreadyExistsException.MESSAGE);
 
   /**

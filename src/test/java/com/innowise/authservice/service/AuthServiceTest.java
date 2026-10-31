@@ -76,7 +76,7 @@ class AuthServiceTest {
 
   @Test
   void loginIssuesAPairForTheAccountWhenThePasswordMatches() {
-    when(credentials.findByLogin("alice@example.com")).thenReturn(Optional.of(account));
+    when(credentials.findByUsername("alice@example.com")).thenReturn(Optional.of(account));
     when(passwordEncoder.matches(PASSWORD, STORED_HASH)).thenReturn(true);
     when(refreshTokens.issuePair(account)).thenReturn(pair);
 
@@ -88,7 +88,7 @@ class AuthServiceTest {
   /** Registration stores logins stripped and lowercase, so a login must be looked up that way. */
   @Test
   void loginIsStrippedAndLowercasedLikeAtRegistration() {
-    when(credentials.findByLogin("alice@example.com")).thenReturn(Optional.of(account));
+    when(credentials.findByUsername("alice@example.com")).thenReturn(Optional.of(account));
     when(passwordEncoder.matches(PASSWORD, STORED_HASH)).thenReturn(true);
     when(refreshTokens.issuePair(account)).thenReturn(pair);
 
@@ -99,7 +99,7 @@ class AuthServiceTest {
 
   @Test
   void aWrongPasswordIsRefusedAndNothingIsIssued() {
-    when(credentials.findByLogin("alice@example.com")).thenReturn(Optional.of(account));
+    when(credentials.findByUsername("alice@example.com")).thenReturn(Optional.of(account));
     when(passwordEncoder.matches(PASSWORD, STORED_HASH)).thenReturn(false);
 
     assertThrows(InvalidCredentialsException.class,
@@ -115,7 +115,7 @@ class AuthServiceTest {
    */
   @Test
   void anUnknownLoginIsRefusedAfterTheSameHashComparison() {
-    when(credentials.findByLogin("nobody@example.com")).thenReturn(Optional.empty());
+    when(credentials.findByUsername("nobody@example.com")).thenReturn(Optional.empty());
     when(passwordEncoder.matches(PASSWORD, DUMMY_HASH)).thenReturn(true);
 
     assertThrows(InvalidCredentialsException.class,
@@ -129,7 +129,7 @@ class AuthServiceTest {
   @Test
   void aPasswordOfMoreThan72BytesIsRefusedWithoutBeingCompared() {
     String tooLong = "a".repeat(73);
-    when(credentials.findByLogin("alice@example.com")).thenReturn(Optional.of(account));
+    when(credentials.findByUsername("alice@example.com")).thenReturn(Optional.of(account));
 
     assertThrows(InvalidCredentialsException.class,
         () -> service.login("alice@example.com", tooLong));
@@ -141,7 +141,7 @@ class AuthServiceTest {
   @Test
   void aPasswordOfExactly72BytesIsStillChecked() {
     String longest = "a".repeat(72);
-    when(credentials.findByLogin("alice@example.com")).thenReturn(Optional.of(account));
+    when(credentials.findByUsername("alice@example.com")).thenReturn(Optional.of(account));
     when(passwordEncoder.matches(longest, STORED_HASH)).thenReturn(true);
     when(refreshTokens.issuePair(account)).thenReturn(pair);
 
@@ -150,8 +150,8 @@ class AuthServiceTest {
 
   @Test
   void bothFailuresLookTheSameAndNeitherRepeatsTheLogin() {
-    when(credentials.findByLogin("alice@example.com")).thenReturn(Optional.of(account));
-    when(credentials.findByLogin("nobody@example.com")).thenReturn(Optional.empty());
+    when(credentials.findByUsername("alice@example.com")).thenReturn(Optional.of(account));
+    when(credentials.findByUsername("nobody@example.com")).thenReturn(Optional.empty());
 
     InvalidCredentialsException wrongPassword = assertThrows(InvalidCredentialsException.class,
         () -> service.login("alice@example.com", PASSWORD));

@@ -49,10 +49,10 @@ class AdminInitializerIntegrationTest extends AbstractIntegrationTest {
     runInitializer("Admin@Example.COM", PASSWORD);
 
     Map<String, Object> row = jdbcTemplate.queryForMap(
-        "SELECT login, password_hash, role, user_id FROM credentials");
+        "SELECT username, password_hash, role, user_id FROM credentials");
     String hash = (String) row.get("password_hash");
     assertAll(
-        () -> assertEquals(LOGIN, row.get("login")),
+        () -> assertEquals(LOGIN, row.get("username")),
         () -> assertEquals("ADMIN", row.get("role")),
         () -> assertNull(row.get("user_id")),
         () -> assertEquals(60, hash.length()),

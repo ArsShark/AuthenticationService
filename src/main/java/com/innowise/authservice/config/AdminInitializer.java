@@ -82,7 +82,7 @@ public class AdminInitializer implements ApplicationRunner {
       }
     } catch (DataIntegrityViolationException ex) {
       // Another instance of the service created the same admin a moment earlier.
-      if (!ViolatedConstraint.UNIQUE_LOGIN.equals(ViolatedConstraint.nameOf(ex))) {
+      if (!ViolatedConstraint.UNIQUE_USERNAME.equals(ViolatedConstraint.nameOf(ex))) {
         throw ex;
       }
       LOGGER.info("The first admin was created by another instance of the service");

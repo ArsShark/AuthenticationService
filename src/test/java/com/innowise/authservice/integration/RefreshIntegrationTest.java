@@ -185,7 +185,7 @@ class RefreshIntegrationTest extends AbstractIntegrationTest {
   void aTokenOfADeletedAccountIsRefused() throws Exception {
     credentialService.register(LOGIN, PASSWORD, 7L);
     String json = login();
-    jdbcTemplate.update("DELETE FROM credentials WHERE login = ?", LOGIN);
+    jdbcTemplate.update("DELETE FROM credentials WHERE username = ?", LOGIN);
 
     refresh(refreshTokenOf(json)).andExpect(status().isUnauthorized());
 
@@ -197,7 +197,7 @@ class RefreshIntegrationTest extends AbstractIntegrationTest {
   void aRefreshReadsTheRoleFromTheDatabase() throws Exception {
     credentialService.register(LOGIN, PASSWORD, 7L);
     String json = login();
-    jdbcTemplate.update("UPDATE credentials SET role = 'ADMIN' WHERE login = ?", LOGIN);
+    jdbcTemplate.update("UPDATE credentials SET role = 'ADMIN' WHERE username = ?", LOGIN);
 
     MvcResult result = refresh(refreshTokenOf(json)).andExpect(status().isOk()).andReturn();
 

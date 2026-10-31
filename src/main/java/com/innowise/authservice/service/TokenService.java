@@ -69,7 +69,7 @@ public class TokenService {
     JwtClaimsSet.Builder claims =
         baseClaims(credential, jti, issuedAt, expiresAt, TokenType.ACCESS)
             .claim(CLAIM_ROLE, credential.getRole().name())
-            .claim(CLAIM_EMAIL, credential.getLogin());
+            .claim(CLAIM_EMAIL, credential.getUsername());
     if (credential.getUserId() != null) {
       claims.claim(CLAIM_USER_ID, credential.getUserId());
     }

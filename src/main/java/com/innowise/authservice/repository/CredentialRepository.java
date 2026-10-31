@@ -14,18 +14,18 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface CredentialRepository extends JpaRepository<Credential, Long> {
 
   /**
-   * Finds the account with this login.
+   * Finds the account with this username (the login, which is the email).
    *
-   * @param login the normalized (stripped, lowercase) login
+   * @param username the normalized (stripped, lowercase) login
    */
-  Optional<Credential> findByLogin(String login);
+  Optional<Credential> findByUsername(String username);
 
   /**
-   * Tells whether an account with this login exists.
+   * Tells whether an account with this username exists.
    *
-   * @param login the normalized (stripped, lowercase) login
+   * @param username the normalized (stripped, lowercase) login
    */
-  boolean existsByLogin(String login);
+  boolean existsByUsername(String username);
 
   /**
    * Tells whether the user profile with this id already has an account.

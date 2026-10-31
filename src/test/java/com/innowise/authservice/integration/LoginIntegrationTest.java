@@ -64,7 +64,7 @@ class LoginIntegrationTest extends AbstractIntegrationTest {
     RefreshTokenClaims refresh =
         tokenService.parseRefreshToken(JsonPath.read(json, "$.refreshToken")).orElseThrow();
     long accountId = Objects.requireNonNull(jdbcTemplate.queryForObject(
-        "SELECT id FROM credentials WHERE login = 'alice@example.com'", Long.class));
+        "SELECT id FROM credentials WHERE username = 'alice@example.com'", Long.class));
     assertAll(
         () -> assertEquals(accountId, access.credentialId()),
         () -> assertEquals(7L, access.userId()),

@@ -11,8 +11,8 @@ import org.hibernate.exception.ConstraintViolationException;
  */
 public final class ViolatedConstraint {
 
-  /** The UNIQUE constraint on {@code credentials.login}. */
-  public static final String UNIQUE_LOGIN = "uq_credentials_login";
+  /** The UNIQUE constraint on {@code credentials.username}. */
+  public static final String UNIQUE_USERNAME = "uq_credentials_username";
 
   /** The UNIQUE constraint on {@code credentials.user_id}. */
   public static final String UNIQUE_USER_ID = "uq_credentials_user_id";

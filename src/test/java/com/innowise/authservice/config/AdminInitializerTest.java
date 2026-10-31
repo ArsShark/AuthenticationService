@@ -126,7 +126,7 @@ class AdminInitializerTest {
 
   @Test
   void lostRaceOnTheUniqueLoginIsNotAnError() {
-    DataIntegrityViolationException violation = integrityViolation("uq_credentials_login");
+    DataIntegrityViolationException violation = integrityViolation("uq_credentials_username");
     when(credentialService.createAdminIfAbsent(LOGIN, PASSWORD)).thenThrow(violation);
 
     assertDoesNotThrow(() -> run(LOGIN, PASSWORD));

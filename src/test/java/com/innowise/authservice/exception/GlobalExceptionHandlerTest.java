@@ -118,7 +118,7 @@ class GlobalExceptionHandlerTest {
 
   @Test
   void lostRaceOnTheUniqueLoginIsConflict() throws Exception {
-    controller.toThrow = integrityViolation("uq_credentials_login", "irrelevant");
+    controller.toThrow = integrityViolation("uq_credentials_username", "irrelevant");
 
     mockMvc.perform(get("/test/throw")).andExpectAll(
         status().isConflict(),

@@ -73,7 +73,7 @@ class CredentialServiceTest {
     verify(credentialRepository).saveAndFlush(saved.capture());
     Credential credential = saved.getValue();
     assertAll(
-        () -> assertEquals("alice@example.com", credential.getLogin()),
+        () -> assertEquals("alice@example.com", credential.getUsername()),
         () -> assertEquals(HASH, credential.getPasswordHash()),
         () -> assertEquals(Role.USER, credential.getRole()),
         () -> assertEquals(USER_ID, credential.getUserId()),
@@ -102,7 +102,7 @@ class CredentialServiceTest {
 
   @Test
   void registerRejectsAnExistingLoginBeforeHashing() {
-    when(credentialRepository.existsByLogin("alice@example.com")).thenReturn(true);
+    when(credentialRepository.existsByUsername("alice@example.com")).thenReturn(true);
 
     assertThrows(LoginAlreadyExistsException.class,
         () -> service.register("Alice@Example.com", PASSWORD, USER_ID));
@@ -144,7 +144,7 @@ class CredentialServiceTest {
     Credential credential = saved.getValue();
     assertAll(
         () -> assertEquals(AdminResult.CREATED, result),
-        () -> assertEquals("admin@example.com", credential.getLogin()),
+        () -> assertEquals("admin@example.com", credential.getUsername()),
         () -> assertEquals(HASH, credential.getPasswordHash()),
         () -> assertEquals(Role.ADMIN, credential.getRole()),
         () -> assertNull(credential.getUserId()));
@@ -152,7 +152,7 @@ class CredentialServiceTest {
 
   @Test
   void createAdminLeavesAnExistingAdminAlone() {
-    when(credentialRepository.findByLogin("admin@example.com"))
+    when(credentialRepository.findByUsername("admin@example.com"))
         .thenReturn(Optional.of(new Credential("admin@example.com", HASH, Role.ADMIN, null)));
 
     AdminResult result = service.createAdminIfAbsent("Admin@Example.com", PASSWORD);
@@ -164,7 +164,7 @@ class CredentialServiceTest {
 
   @Test
   void createAdminDoesNotTakeOverTheLoginOfAUser() {
-    when(credentialRepository.findByLogin("admin@example.com"))
+    when(credentialRepository.findByUsername("admin@example.com"))
         .thenReturn(Optional.of(new Credential("admin@example.com", HASH, Role.USER, USER_ID)));
 
     AdminResult result = service.createAdminIfAbsent("admin@example.com", PASSWORD);

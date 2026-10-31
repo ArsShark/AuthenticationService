@@ -25,7 +25,7 @@ public record CredentialResponse(Long id, String login, Role role, Long userId,
    * @return the public view of the account
    */
   public static CredentialResponse from(Credential credential) {
-    return new CredentialResponse(credential.getId(), credential.getLogin(),
+    return new CredentialResponse(credential.getId(), credential.getUsername(),
         credential.getRole(), credential.getUserId(), credential.getCreatedAt());
   }
 }

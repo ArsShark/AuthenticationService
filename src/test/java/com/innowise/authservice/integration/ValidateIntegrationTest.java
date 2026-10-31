@@ -143,7 +143,7 @@ class ValidateIntegrationTest extends AbstractIntegrationTest {
   void aDeletedAccountKeepsAValidTokenUntilItExpires() throws Exception {
     credentialService.register(LOGIN, PASSWORD, 7L);
     String accessToken = accessTokenOf(login(LOGIN, PASSWORD));
-    jdbcTemplate.update("DELETE FROM credentials WHERE login = ?", LOGIN);
+    jdbcTemplate.update("DELETE FROM credentials WHERE username = ?", LOGIN);
 
     validate(accessToken).andExpect(jsonPath("$.valid").value(true));
   }

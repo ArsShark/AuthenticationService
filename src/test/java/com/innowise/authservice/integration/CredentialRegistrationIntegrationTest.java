@@ -64,11 +64,11 @@ class CredentialRegistrationIntegrationTest extends AbstractIntegrationTest {
         jsonPath("$.passwordHash").doesNotExist()).andReturn();
 
     Map<String, Object> row = jdbcTemplate.queryForMap(
-        "SELECT login, password_hash, role, user_id FROM credentials");
+        "SELECT username, password_hash, role, user_id FROM credentials");
     String hash = (String) row.get("password_hash");
     String response = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
     assertAll(
-        () -> assertEquals("alice@example.com", row.get("login")),
+        () -> assertEquals("alice@example.com", row.get("username")),
         () -> assertEquals("USER", row.get("role")),
         () -> assertEquals(7L, ((Number) row.get("user_id")).longValue()),
         () -> assertEquals(60, hash.length()),

@@ -82,7 +82,7 @@ public abstract class AbstractIntegrationTest {
    */
   protected long insertCredential(String login, String role, Long userId) {
     Long id = jdbcTemplate.queryForObject("""
-        INSERT INTO credentials (login, password_hash, role, user_id, created_at, updated_at)
+        INSERT INTO credentials (username, password_hash, role, user_id, created_at, updated_at)
         VALUES (?, ?, ?, ?, now(), now())
         RETURNING id
         """, Long.class, login, HASH, role, userId);

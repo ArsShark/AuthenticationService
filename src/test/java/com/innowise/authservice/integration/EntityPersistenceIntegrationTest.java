@@ -56,7 +56,7 @@ class EntityPersistenceIntegrationTest extends AbstractIntegrationTest {
             sql("SELECT credential_id FROM refresh_tokens", Long.class)),
         () -> assertEquals(jti, sql("SELECT jti FROM refresh_tokens", UUID.class)),
         () -> assertNull(sql("SELECT revoked_at FROM refresh_tokens", OffsetDateTime.class)),
-        () -> assertEquals("a@x.com", loaded.getLogin()),
+        () -> assertEquals("a@x.com", loaded.getUsername()),
         () -> assertEquals(Role.USER, loaded.getRole()),
         () -> assertEquals(HASH, loaded.getPasswordHash()));
   }

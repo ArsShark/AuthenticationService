@@ -18,9 +18,9 @@ class ViolatedConstraintTest {
   @Test
   void findsTheNameDeepInTheCauseChain() {
     Exception exception = new DataIntegrityViolationException("outer",
-        new RuntimeException("middle", hibernateException("uq_credentials_login")));
+        new RuntimeException("middle", hibernateException("uq_credentials_username")));
 
-    assertEquals("uq_credentials_login", ViolatedConstraint.nameOf(exception));
+    assertEquals("uq_credentials_username", ViolatedConstraint.nameOf(exception));
   }
 
   @Test

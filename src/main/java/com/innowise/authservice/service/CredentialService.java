@@ -55,7 +55,7 @@ public class CredentialService {
   @Transactional
   public CredentialResponse register(String login, String password, Long userId) {
     String normalizedLogin = normalize(login);
-    if (credentialRepository.existsByLogin(normalizedLogin)) {
+    if (credentialRepository.existsByUsername(normalizedLogin)) {
       throw new LoginAlreadyExistsException();
     }
     if (credentialRepository.existsByUserId(userId)) {
@@ -85,7 +85,7 @@ public class CredentialService {
   @Transactional
   public AdminResult createAdminIfAbsent(String login, String password) {
     String normalizedLogin = normalize(login);
-    Optional<Credential> existing = credentialRepository.findByLogin(normalizedLogin);
+    Optional<Credential> existing = credentialRepository.findByUsername(normalizedLogin);
     if (existing.isPresent()) {
       return existing.get().getRole() == Role.ADMIN
           ? AdminResult.ADMIN_EXISTS
