@@ -4,9 +4,9 @@ Part of the e-commerce microservice application (Innowise Java Advanced course).
 The service stores user credentials, logs users in and issues, refreshes and validates JWT
 tokens. It also publishes the public key that the other services use to verify the tokens.
 
-**Status:** accounts, login, refresh, validation and the public key (JWKS) are ready, and the
+**Status:** registration, login, refresh, validation and the public key (JWKS) are ready, and the
 service runs in Docker (Dockerfile and Compose file). User Service already verifies the tokens;
-the API Gateway starts to use them in its own pull request.
+the API Gateway uses them in its own pull request.
 
 ## Requirements
 
@@ -32,6 +32,7 @@ All settings are environment variables.
 | `JWT_ACCESS_TTL` | `PT15M` | Lifetime of an access token (ISO-8601 duration) |
 | `JWT_REFRESH_TTL` | `P7D` | Lifetime of a refresh token (ISO-8601 duration) |
 | `JWT_ISSUER` | `authentication-service` | The `iss` claim of every token; the services that verify tokens expect the same value |
+| `USER_SERVICE_URI` | `http://localhost:8082` (`local`), `http://user-service:8082` (`docker`) | Internal address of the User Service, called during a registration (never the API Gateway) |
 | `ADMIN_LOGIN` | empty | Login (an email) of the first admin, see below |
 | `ADMIN_PASSWORD` | empty | Password of the first admin, see below |
 
@@ -197,11 +198,40 @@ Errors are RFC 9457 `application/problem+json`. Responses that carry tokens are 
 
 | Endpoint | Who may call it |
 |---|---|
+| `POST /api/auth/register` | Anybody |
 | `POST /api/auth/login` | Anybody |
 | `POST /api/auth/refresh` | Anybody (the refresh token is the credential) |
 | `POST /api/auth/validate` | Anybody |
 | `GET /.well-known/jwks.json` | Anybody, but meant for the other services: the Gateway does not route it |
 | `POST /internal/credentials` | The internal caller only, with `X-Internal-Key` |
+
+### Register: `POST /api/auth/register`
+
+Creates a user: the profile in the User Service and the account here (role `USER`, the email is
+the login). There is no token in the answer, the user logs in next.
+
+```json
+{"name": "Alice", "surname": "Smith", "birthDate": "1990-05-17",
+ "email": "alice@example.com", "password": "s3cret-passw0rd"}
+```
+
+The answer is `201` with the new profile (`id`, `name`, `surname`, `birthDate`, `email` in the
+stored lowercase form).
+
+| Status | When |
+|---|---|
+| `400` | The body is invalid (`errors` lists `{field, message}` sorted by field, without the values), checked before any call |
+| `409` | The email is taken, in the User Service or here: `An account with this email already exists` |
+| `502` | The User Service cannot be reached or answers with an error |
+| `504` | The User Service does not answer in time (2 s to connect, 5 s to answer) |
+
+The flow: the profile is created with `POST /internal/users` (header `X-Internal-Key`), then the
+account is saved with the email exactly as the User Service stored it. If the account cannot be
+saved, the profile is deleted again (`DELETE /internal/users/{id}`; a `404` there means "already
+gone") before the answer, so a failed registration leaves nothing behind. The service has no
+transaction around the HTTP call, which would hold a database connection while the User Service
+answers. If the undoing itself fails, an `ERROR` with the profile id is logged and the caller still
+gets the original error.
 
 ### Log in: `POST /api/auth/login`
 
@@ -398,7 +428,7 @@ so another method on the same path stays closed.
 
 | Request | Answer |
 |---|---|
-| `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/validate` | Allowed for everybody |
+| `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/validate` | Allowed for everybody |
 | `GET /.well-known/jwks.json` | Allowed for everybody |
 | `/internal/**` with the right `X-Internal-Key` | Allowed: the caller gets the role `INTERNAL` |
 | `/internal/**` with no key or a wrong key | `401` |
@@ -448,6 +478,12 @@ so another method on the same path stays closed.
   noticed at the next refresh.
 - There is no key rotation: one key is published. A new key invalidates all tokens.
 - Expired refresh tokens stay in the table.
+- A crash of this service between the creation of the profile and the saving of the account
+  leaves a profile without an account that keeps its email: it has to be removed by hand
+  (`DELETE /internal/users/{id}`), a repair job would fix it. The same for an undoing whose
+  deletion fails (logged at `ERROR`).
+- The registration has no retry and no circuit breaker: a failed call to the User Service is a
+  `502` or `504` at once.
 
 ## Troubleshooting
 
