@@ -48,15 +48,40 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
       ViolatedConstraint.UNIQUE_USER_ID, UserCredentialAlreadyExistsException.MESSAGE);
 
   /**
-   * Handles a taken login or a user that already has an account.
+   * Handles a taken login or email, or a user that already has an account.
    *
    * @param ex the rejection of the service
    * @return 409
    */
   @ExceptionHandler({LoginAlreadyExistsException.class,
-      UserCredentialAlreadyExistsException.class})
+      UserCredentialAlreadyExistsException.class, EmailAlreadyRegisteredException.class})
   public ResponseEntity<ProblemDetail> handleConflict(RuntimeException ex) {
     return reject(HttpStatus.CONFLICT, ex.getMessage(), ex);
+  }
+
+  /**
+   * Handles a User Service that cannot be reached or answers unexpectedly during a registration.
+   * The detail is a constant: the cause is in the log, never in the response.
+   *
+   * @param ex the failure of the call
+   * @return 502
+   */
+  @ExceptionHandler(UserServiceUnavailableException.class)
+  public ResponseEntity<ProblemDetail> handleUserServiceUnavailable(
+      UserServiceUnavailableException ex) {
+    return reject(HttpStatus.BAD_GATEWAY, ex.getMessage(), ex);
+  }
+
+  /**
+   * Handles a User Service that does not answer in time during a registration.
+   *
+   * @param ex the failure of the call
+   * @return 504
+   */
+  @ExceptionHandler(UserServiceTimeoutException.class)
+  public ResponseEntity<ProblemDetail> handleUserServiceTimeout(
+      UserServiceTimeoutException ex) {
+    return reject(HttpStatus.GATEWAY_TIMEOUT, ex.getMessage(), ex);
   }
 
   /**

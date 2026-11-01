@@ -27,7 +27,8 @@ import org.springframework.test.web.servlet.MockMvc;
  * {@code @SpringBootTest} annotation of this class, for all subclasses at once; the first admin
  * is switched off there, so an {@code ADMIN_LOGIN} in the environment of a developer cannot change
  * a test. The signing key of the tokens cannot be a constant of an annotation, because it is
- * generated at runtime; it is set by {@link #jwtProperties(DynamicPropertyRegistry)} for the same
+ * generated at runtime, and the address of the User Service (a WireMock server) is not known
+ * before it starts; both are set by {@link #jwtProperties(DynamicPropertyRegistry)} for the same
  * shared context. Tests are not
  * {@code @Transactional}, so they see real commits; {@link #resetState()} cleans up before every
  * test.
@@ -36,7 +37,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(properties = {
     "app.internal.api-key=test-internal-key",
     "app.admin.login=",
-    "app.admin.password="
+    "app.admin.password=",
+    "app.user-service.read-timeout=1s"
 })
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, TestClockConfiguration.class})
@@ -67,11 +69,13 @@ public abstract class AbstractIntegrationTest {
   @DynamicPropertySource
   static void jwtProperties(DynamicPropertyRegistry registry) {
     registry.add("app.jwt.private-key", () -> TestKeys.PRIVATE_KEY_BASE64);
+    registry.add("app.user-service.base-uri", UserServiceStub.SERVER::baseUrl);
   }
 
   @BeforeEach
   void resetState() {
     jdbcTemplate.execute("TRUNCATE refresh_tokens, credentials RESTART IDENTITY");
+    UserServiceStub.reset();
     clock.set(START);
   }
 

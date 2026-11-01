@@ -28,8 +28,8 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
- * Proves the rule that no password, hash, token, login, {@code jti}, key or internal key ever
- * reaches the log, for the whole service at once.
+ * Proves the rule that no password, hash, token, login, name, email, {@code jti}, key or
+ * internal key ever reaches the log, for the whole service at once.
  *
  * <p>An appender is attached to the logger that serves the whole application, then one run goes
  * through every endpoint, with successes and with every kind of failure. Afterwards each secret
@@ -51,6 +51,10 @@ class SecretsNotLoggedIntegrationTest extends AbstractIntegrationTest {
   private static final String ADMIN_PASSWORD = "Adm1n-passw0rd";
   private static final String CAROL_LOGIN = "carol@example.com";
   private static final String CAROL_PASSWORD = "c4rol-passw0rd";
+  private static final String DAVE_EMAIL = "dave@example.com";
+  private static final String DAVE_PASSWORD = "d4ve-passw0rd";
+  private static final String DAVE_NAME = "Davenport";
+  private static final String DAVE_SURNAME = "Brownlee";
 
   @Autowired
   private CredentialService credentialService;
@@ -93,6 +97,21 @@ class SecretsNotLoggedIntegrationTest extends AbstractIntegrationTest {
       internal(carol, INTERNAL_KEY).andExpect(status().isCreated());
       internal(carol, INTERNAL_KEY).andExpect(status().isConflict());
       internal(carol, WRONG_INTERNAL_KEY).andExpect(status().isUnauthorized());
+
+      // The registration: a success, a taken login (the profile is undone), an unreachable
+      // User Service, and an invalid body.
+      String dave = String.format("""
+          {"name": "%s", "surname": "%s", "birthDate": "1990-05-17",
+           "email": "%s", "password": "%s"}
+          """, DAVE_NAME, DAVE_SURNAME, DAVE_EMAIL, DAVE_PASSWORD);
+      UserServiceStub.createsProfile(51L, DAVE_EMAIL);
+      UserServiceStub.deleteAnswers(204);
+      send("/api/auth/register", dave).andExpect(status().isCreated());
+      send("/api/auth/register", dave).andExpect(status().isConflict());
+      UserServiceStub.createAnswers(500);
+      send("/api/auth/register", dave).andExpect(status().isBadGateway());
+      send("/api/auth/register", dave.replace(DAVE_PASSWORD, "short"))
+          .andExpect(status().isBadRequest());
     } finally {
       appender.detach();
     }
@@ -108,6 +127,8 @@ class SecretsNotLoggedIntegrationTest extends AbstractIntegrationTest {
         () -> assertTrue(containsLine(lines, "logged in"), "the capture sees the login"),
         () -> assertTrue(containsLine(lines, "refreshed its tokens"), "and the refresh"),
         () -> assertTrue(containsLine(lines, "valid tokens revoked"), "and the reuse warning"),
+        () -> assertTrue(containsLine(lines, "User 51 registered"), "and the registration"),
+        () -> assertTrue(containsLine(lines, "undoing it"), "and the undoing"),
         () -> assertEquals(List.of(), leaked, "secrets found in the log"));
   }
 
@@ -124,6 +145,10 @@ class SecretsNotLoggedIntegrationTest extends AbstractIntegrationTest {
     secrets.put("unknown login", UNKNOWN_LOGIN);
     secrets.put("admin login", ADMIN_LOGIN);
     secrets.put("carol login", CAROL_LOGIN);
+    secrets.put("registered email", DAVE_EMAIL);
+    secrets.put("registered password", DAVE_PASSWORD);
+    secrets.put("registered name", DAVE_NAME);
+    secrets.put("registered surname", DAVE_SURNAME);
     secrets.put("first access token", firstAccess);
     secrets.put("first refresh token", firstRefresh);
     secrets.put("second access token", secondAccess);

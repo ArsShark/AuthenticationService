@@ -80,7 +80,8 @@ public class SecurityConfig {
         .authorizeHttpRequests(requests -> requests
             .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
             .requestMatchers(HttpMethod.POST,
-                "/api/auth/login", "/api/auth/refresh", "/api/auth/validate").permitAll()
+                "/api/auth/login", "/api/auth/refresh", "/api/auth/validate",
+                "/api/auth/register").permitAll()
             .requestMatchers(HttpMethod.GET, "/.well-known/jwks.json").permitAll()
             .requestMatchers("/internal/**").hasRole(InternalKeyAuthenticationFilter.ROLE)
             .anyRequest().denyAll())
