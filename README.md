@@ -225,13 +225,26 @@ stored lowercase form).
 | `502` | The User Service cannot be reached or answers with an error |
 | `504` | The User Service does not answer in time (2 s to connect, 5 s to answer) |
 
-The flow: the profile is created with `POST /internal/users` (header `X-Internal-Key`), then the
-account is saved with the email exactly as the User Service stored it. If the account cannot be
-saved, the profile is deleted again (`DELETE /internal/users/{id}`; a `404` there means "already
-gone") before the answer, so a failed registration leaves nothing behind. The service has no
-transaction around the HTTP call, which would hold a database connection while the User Service
-answers. If the undoing itself fails, an `ERROR` with the profile id is logged and the caller still
-gets the original error.
+The flow: the service chooses a random **registration id** for the attempt, creates the profile
+with `POST /internal/users` (headers `X-Internal-Key` and `X-Registration-Id`; the User Service
+stores the id with the profile), then saves the account with the email exactly as the User Service
+stored it. The profile is deleted again with `DELETE /internal/users/by-registration/{id}` (a
+`404` there means "already gone", so the call can be repeated) in two cases:
+
+- the account cannot be saved (the login is taken, the database fails);
+- the creation ended without a usable answer although the profile may exist: the answer timed
+  out, the connection broke, the User Service or a proxy in front of it answered `5xx`, or a
+  created answer has no id. The id of the profile is not known then, but the registration id is.
+
+The profile is not deleted when it certainly was not created: the connection could not be
+opened, or the User Service rejected the request with a `4xx`. The registration id belongs to one
+attempt, so the deletion can never remove the profile of another registration of the same email.
+
+A failed deletion is repeated: three attempts in all, with pauses of 200 ms and 400 ms. If every
+attempt fails, an `ERROR` with the registration id is logged and the caller still gets the
+original error. So, as long as the User Service can be reached for the deletion, a failed
+registration leaves no profile behind. The service has no transaction around the HTTP call, which
+would hold a database connection while the User Service answers.
 
 ### Log in: `POST /api/auth/login`
 
@@ -479,11 +492,19 @@ so another method on the same path stays closed.
 - There is no key rotation: one key is published. A new key invalidates all tokens.
 - Expired refresh tokens stay in the table.
 - A crash of this service between the creation of the profile and the saving of the account
-  leaves a profile without an account that keeps its email: it has to be removed by hand
-  (`DELETE /internal/users/{id}`), a repair job would fix it. The same for an undoing whose
-  deletion fails (logged at `ERROR`).
-- The registration has no retry and no circuit breaker: a failed call to the User Service is a
-  `502` or `504` at once.
+  leaves a profile without an account that keeps its email, so every later registration with it
+  is a `409`. Nothing logs the registration id before the crash: find the profile through the
+  admin API of the User Service and remove it with `DELETE /internal/users/{id}`. A repair job
+  would fix it.
+- An undoing whose three attempts all fail (the User Service stays unreachable for about a
+  second) leaves the profile too. The `ERROR` line `Undoing registration <id> is incomplete`
+  has the registration id: remove the profile with
+  `DELETE /internal/users/by-registration/<id>` and the internal key. A profile created before the
+  registration id existed has none and is removed by its own id.
+- The undoing is repeated, the creation is not, and there is no circuit breaker: a failed call to
+  the User Service is a `502` or `504`. When the User Service answers nothing, a failing
+  registration takes up to about 5 s for the creation and 15 s for the three deletions; a client
+  behind the Gateway gives up earlier, and the undoing still runs to its end.
 
 ## Troubleshooting
 
