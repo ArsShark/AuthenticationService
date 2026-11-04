@@ -76,6 +76,14 @@ class RegistrationIntegrationTest extends AbstractIntegrationTest {
     return ids;
   }
 
+  /** The registration id of the one deletion of the test (the last path segment). */
+  private static String deletedRegistrationId() {
+    List<LoggedRequest> deletions = UserServiceStub.deletions();
+    assertEquals(1, deletions.size());
+    String url = deletions.get(0).getUrl();
+    return url.substring(url.lastIndexOf('/') + 1);
+  }
+
   /** The registration id of the one creation of the test, as the User Service received it. */
   private static String sentRegistrationId() {
     List<LoggedRequest> creations = UserServiceStub.creations();
@@ -201,9 +209,27 @@ class RegistrationIntegrationTest extends AbstractIntegrationTest {
         () -> assertEquals(1, deleteCalls()));
   }
 
+  /** A 5xx may come after the profile was created: the profile of this attempt is removed. */
   @Test
-  void aUserServiceErrorIs502WithNothingLeftBehind() throws Exception {
+  void aUserServiceErrorIs502AndTheProfileThatMayExistIsUndone() throws Exception {
     UserServiceStub.createAnswers(500);
+    UserServiceStub.deleteAnswers(204);
+
+    register(BODY).andExpectAll(
+        status().isBadGateway(),
+        jsonPath("$.detail").value(UserServiceUnavailableException.MESSAGE));
+
+    assertAll(
+        () -> assertEquals(0, countAccounts()),
+        () -> assertEquals(1, deleteCalls()),
+        () -> assertEquals(sentRegistrationId(), deletedRegistrationId()));
+  }
+
+  /** The User Service rejects the request (4xx) before it changes anything: no deletion. */
+  @Test
+  void aRejectedCreationIs502AndIsNotUndone() throws Exception {
+    UserServiceStub.createAnswers(400);
+    UserServiceStub.deleteAnswers(204);
 
     register(BODY).andExpectAll(
         status().isBadGateway(),
@@ -214,16 +240,69 @@ class RegistrationIntegrationTest extends AbstractIntegrationTest {
         () -> assertEquals(0, deleteCalls()));
   }
 
+  /** The reported case: the profile exists, the answer is lost; the email must not stay taken. */
   @Test
-  void aSlowUserServiceIs504WithNothingLeftBehind() throws Exception {
+  void aLostAnswerIs502AndTheProfileThatMayExistIsUndone() throws Exception {
+    UserServiceStub.createLosesTheAnswer();
+    UserServiceStub.deleteAnswers(204);
+
+    register(BODY).andExpectAll(
+        status().isBadGateway(),
+        jsonPath("$.detail").value(UserServiceUnavailableException.MESSAGE));
+
+    assertAll(
+        () -> assertEquals(0, countAccounts()),
+        () -> assertEquals(1, UserServiceStub.creations().size()),
+        () -> assertEquals(1, deleteCalls()),
+        () -> assertEquals(sentRegistrationId(), deletedRegistrationId()));
+  }
+
+  /** A 201 without an id means the profile exists but cannot be named: undo it by the id. */
+  @Test
+  void aCreatedAnswerWithoutAnIdIs502AndTheProfileIsUndone() throws Exception {
+    UserServiceStub.createAnswers(201, "{\"email\": \"alice@example.com\"}");
+    UserServiceStub.deleteAnswers(204);
+
+    register(BODY).andExpect(status().isBadGateway());
+
+    assertAll(
+        () -> assertEquals(0, countAccounts()),
+        () -> assertEquals(1, deleteCalls()),
+        () -> assertEquals(sentRegistrationId(), deletedRegistrationId()));
+  }
+
+  /** After a lost answer was undone, the user can register again (the email is not taken). */
+  @Test
+  void aRetryAfterALostAnswerSucceeds() throws Exception {
+    UserServiceStub.createLosesTheAnswer();
+    UserServiceStub.deleteAnswers(204);
+    register(BODY).andExpect(status().isBadGateway());
+
+    UserServiceStub.createsProfile(31L, "alice@example.com");
+    register(BODY).andExpectAll(status().isCreated(), jsonPath("$.id").value(31));
+
+    assertAll(
+        () -> assertEquals(1, countAccounts()),
+        () -> assertEquals(1, deleteCalls()),
+        // Two attempts, two different registration ids.
+        () -> assertEquals(2, registrationIdsOf(UserServiceStub.creations()).size()));
+  }
+
+  /** A timeout of the answer: the profile may exist, so it is undone as well. */
+  @Test
+  void aSlowUserServiceIs504AndTheProfileThatMayExistIsUndone() throws Exception {
     // Far above the read timeout of the shared context (5 s).
     UserServiceStub.createAnswersSlowly(7000);
+    UserServiceStub.deleteAnswers(204);
 
     register(BODY).andExpectAll(
         status().isGatewayTimeout(),
         jsonPath("$.detail").value(UserServiceTimeoutException.MESSAGE));
 
-    assertEquals(0, countAccounts());
+    assertAll(
+        () -> assertEquals(0, countAccounts()),
+        () -> assertEquals(1, deleteCalls()),
+        () -> assertEquals(sentRegistrationId(), deletedRegistrationId()));
   }
 
   /** The body is checked before any call: nothing reaches the User Service. */

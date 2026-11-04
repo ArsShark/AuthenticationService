@@ -1,9 +1,13 @@
 package com.innowise.authservice.client;
 
 import com.innowise.authservice.exception.EmailAlreadyRegisteredException;
+import com.innowise.authservice.exception.UserServiceCallException;
 import com.innowise.authservice.exception.UserServiceTimeoutException;
 import com.innowise.authservice.exception.UserServiceUnavailableException;
+import java.net.ConnectException;
 import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
+import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -32,6 +36,13 @@ import org.springframework.web.client.RestClientResponseException;
  * an unreadable body) is {@link UserServiceUnavailableException}. The cause is logged with the
  * class name or the status only: the messages of the HTTP client hold the address of the service,
  * and a body can hold an email.
+ *
+ * <p>Both exceptions also say whether the User Service may have carried the request out
+ * ({@link UserServiceCallException#isOutcomeUnknown()}). It certainly did not when the connection
+ * could not be opened or when it answered with a client error (4xx: it checks and rejects a
+ * request before it changes anything). In every other case the answer may have been lost after
+ * the work was done: a timeout of the answer, a connection that broke, a 5xx (also from a proxy
+ * in front of the service), and a successful answer that cannot be read or has no id.
  */
 @Component
 public class UserServiceClient {
@@ -56,6 +67,7 @@ public class UserServiceClient {
    * @throws EmailAlreadyRegisteredException if the User Service answers 409
    * @throws UserServiceTimeoutException if the call ran out of time
    * @throws UserServiceUnavailableException for every other failure
+   * @see UserServiceCallException#isOutcomeUnknown()
    */
   public InternalUserResponse create(InternalUserRequest request, UUID registrationId) {
     InternalUserResponse user;
@@ -72,7 +84,7 @@ public class UserServiceClient {
     }
     if (user == null || user.id() == null || user.email() == null) {
       LOGGER.error("The user service created a profile but the answer has no id or email");
-      throw new UserServiceUnavailableException();
+      throw new UserServiceUnavailableException(true);
     }
     return user;
   }
@@ -101,21 +113,41 @@ public class UserServiceClient {
     }
   }
 
-  private static RuntimeException translate(RestClientException error, boolean creating) {
+  private static UserServiceCallException translate(RestClientException error,
+      boolean creating) {
     if (error instanceof RestClientResponseException response) {
       int status = response.getStatusCode().value();
       if (creating && status == HttpStatus.CONFLICT.value()) {
-        return new EmailAlreadyRegisteredException();
+        throw new EmailAlreadyRegisteredException();
       }
       LOGGER.error("The user service answered with status {}", status);
-      return new UserServiceUnavailableException();
+      return new UserServiceUnavailableException(!response.getStatusCode().is4xxClientError());
     }
+    boolean neverSent = requestNeverSent(error);
     if (error instanceof ResourceAccessException access && isTimeout(access)) {
       LOGGER.warn("The call to the user service ran out of time ({})", rootClass(access));
-      return new UserServiceTimeoutException();
+      return new UserServiceTimeoutException(!neverSent);
     }
     LOGGER.error("The call to the user service failed ({})", rootClass(error));
-    return new UserServiceUnavailableException();
+    return new UserServiceUnavailableException(!neverSent);
+  }
+
+  /**
+   * Tells whether a failed call certainly never reached the User Service: the connection could
+   * not be opened (refused, timed out, unknown host). Any other failure of the transport may have
+   * come after the request was sent and processed.
+   *
+   * @param error the failure of the call; its causes are searched too
+   */
+  static boolean requestNeverSent(Throwable error) {
+    for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+      if (cause instanceof ConnectException
+          || cause instanceof HttpConnectTimeoutException
+          || cause instanceof UnknownHostException) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static boolean isTimeout(ResourceAccessException error) {

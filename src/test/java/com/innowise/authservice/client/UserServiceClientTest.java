@@ -12,21 +12,34 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.http.Fault;
 import com.innowise.authservice.config.InternalApiProperties;
 import com.innowise.authservice.config.UserServiceClientConfig;
 import com.innowise.authservice.config.UserServiceProperties;
 import com.innowise.authservice.exception.EmailAlreadyRegisteredException;
 import com.innowise.authservice.exception.UserServiceTimeoutException;
 import com.innowise.authservice.exception.UserServiceUnavailableException;
+import java.io.IOException;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
+import java.net.http.HttpConnectTimeoutException;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.web.client.ResourceAccessException;
 
 /**
  * Tests {@link UserServiceClient} against a WireMock server that plays the User Service: what it
@@ -117,69 +130,134 @@ class UserServiceClientTest {
         () -> client.create(REQUEST, REGISTRATION_ID));
   }
 
-  @Test
-  void anErrorStatusIsUnavailable() {
+  /** A server error may come after the work was done (or from a proxy): the outcome is unknown. */
+  @ParameterizedTest
+  @ValueSource(ints = {500, 502, 503, 504})
+  void aServerErrorIsUnavailableWithAnUnknownOutcome(int status) {
     userService.stubFor(post(urlEqualTo("/internal/users"))
-        .willReturn(aResponse().withStatus(500).withBody("secret details")));
+        .willReturn(aResponse().withStatus(status).withBody("secret details")));
 
     UserServiceUnavailableException error =
         assertThrows(UserServiceUnavailableException.class,
             () -> client.create(REQUEST, REGISTRATION_ID));
 
-    assertEquals(UserServiceUnavailableException.MESSAGE, error.getMessage());
+    assertAll(
+        () -> assertEquals(UserServiceUnavailableException.MESSAGE, error.getMessage()),
+        () -> assertTrue(error.isOutcomeUnknown()));
   }
 
-  @Test
-  void aBadRequestIsUnavailableToo() {
+  /** The User Service checks and rejects a request before it changes anything. */
+  @ParameterizedTest
+  @ValueSource(ints = {400, 401, 403})
+  void aClientErrorIsUnavailableWithNothingCreated(int status) {
     userService.stubFor(post(urlEqualTo("/internal/users"))
-        .willReturn(aResponse().withStatus(400)));
+        .willReturn(aResponse().withStatus(status)));
 
-    assertThrows(UserServiceUnavailableException.class,
-        () -> client.create(REQUEST, REGISTRATION_ID));
+    UserServiceUnavailableException error =
+        assertThrows(UserServiceUnavailableException.class,
+            () -> client.create(REQUEST, REGISTRATION_ID));
+
+    assertFalse(error.isOutcomeUnknown());
   }
 
+  /** The profile was created (201), so the outcome is unknown even though no id came back. */
   @Test
-  void aCreatedAnswerWithoutAnIdIsUnavailable() {
+  void aCreatedAnswerWithoutAnIdIsUnavailableWithAnUnknownOutcome() {
     userService.stubFor(post(urlEqualTo("/internal/users")).willReturn(aResponse()
         .withStatus(201)
         .withHeader("Content-Type", "application/json")
         .withBody("{\"email\": \"alice@example.com\"}")));
 
-    assertThrows(UserServiceUnavailableException.class,
-        () -> client.create(REQUEST, REGISTRATION_ID));
+    UserServiceUnavailableException error =
+        assertThrows(UserServiceUnavailableException.class,
+            () -> client.create(REQUEST, REGISTRATION_ID));
+
+    assertTrue(error.isOutcomeUnknown());
   }
 
   @Test
-  void aBodyThatIsNotJsonIsUnavailable() {
+  void aBodyThatIsNotJsonIsUnavailableWithAnUnknownOutcome() {
     userService.stubFor(post(urlEqualTo("/internal/users")).willReturn(aResponse()
         .withStatus(201)
         .withHeader("Content-Type", "application/json")
         .withBody("not json")));
 
-    assertThrows(UserServiceUnavailableException.class,
-        () -> client.create(REQUEST, REGISTRATION_ID));
+    UserServiceUnavailableException error =
+        assertThrows(UserServiceUnavailableException.class,
+            () -> client.create(REQUEST, REGISTRATION_ID));
+
+    assertTrue(error.isOutcomeUnknown());
   }
 
+  /** The answer is lost in a moment, with no waiting: the connection breaks after the request. */
+  @ParameterizedTest
+  @EnumSource(value = Fault.class,
+      names = {"CONNECTION_RESET_BY_PEER", "EMPTY_RESPONSE", "MALFORMED_RESPONSE_CHUNK"})
+  void aBrokenConnectionIsUnavailableWithAnUnknownOutcome(Fault fault) {
+    userService.stubFor(post(urlEqualTo("/internal/users"))
+        .willReturn(aResponse().withFault(fault)));
+
+    UserServiceUnavailableException error =
+        assertThrows(UserServiceUnavailableException.class,
+            () -> client.create(REQUEST, REGISTRATION_ID));
+
+    assertTrue(error.isOutcomeUnknown());
+  }
+
+  /** A timeout of the answer: the request was sent, so it may have been carried out. */
   @Test
-  void aSlowAnswerIsATimeout() {
+  void aSlowAnswerIsATimeoutWithAnUnknownOutcome() {
     userService.stubFor(post(urlEqualTo("/internal/users"))
         .willReturn(aResponse().withStatus(201).withFixedDelay(SLOW_ANSWER_MILLIS)));
     UserServiceClient impatient =
         clientFor(userService.baseUrl(), GENEROUS_TIMEOUT, SHORT_READ_TIMEOUT);
 
-    assertThrows(UserServiceTimeoutException.class,
+    UserServiceTimeoutException error = assertThrows(UserServiceTimeoutException.class,
         () -> impatient.create(REQUEST, REGISTRATION_ID));
+
+    assertTrue(error.isOutcomeUnknown());
   }
 
+  /** Nobody listens: the request never left, so nothing can have been created. */
   @Test
-  void aServiceThatIsNotThereIsUnavailable() {
+  void aServiceThatIsNotThereIsUnavailableWithNothingCreated() {
     String address = userService.baseUrl();
     userService.stop();
 
     UserServiceClient offline = clientFor(address, GENEROUS_TIMEOUT, GENEROUS_TIMEOUT);
 
-    assertThrows(UserServiceUnavailableException.class,
-        () -> offline.create(REQUEST, REGISTRATION_ID));
+    UserServiceUnavailableException error =
+        assertThrows(UserServiceUnavailableException.class,
+            () -> offline.create(REQUEST, REGISTRATION_ID));
+
+    assertFalse(error.isOutcomeUnknown());
+  }
+
+  @Test
+  void aConnectionThatCouldNotBeOpenedNeverSentTheRequest() {
+    assertAll(
+        () -> assertTrue(UserServiceClient.requestNeverSent(new ConnectException())),
+        () -> assertTrue(UserServiceClient.requestNeverSent(
+            new HttpConnectTimeoutException("connect timed out"))),
+        () -> assertTrue(UserServiceClient.requestNeverSent(new UnknownHostException())),
+        // The causes are searched too: the HTTP client wraps the failure.
+        () -> assertTrue(UserServiceClient.requestNeverSent(
+            new ResourceAccessException("I/O error", new ConnectException()))),
+        () -> assertTrue(UserServiceClient.requestNeverSent(
+            new IOException("wrapped", new HttpConnectTimeoutException("connect")))));
+  }
+
+  /** Every failure after the connection was open may have come after the work was done. */
+  @Test
+  void aFailureAfterTheConnectionWasOpenMayHaveSentTheRequest() {
+    assertAll(
+        () -> assertFalse(UserServiceClient.requestNeverSent(new IOException("reset"))),
+        () -> assertFalse(UserServiceClient.requestNeverSent(
+            new SocketTimeoutException("read timed out"))),
+        () -> assertFalse(UserServiceClient.requestNeverSent(
+            new HttpTimeoutException("request timed out"))),
+        () -> assertFalse(UserServiceClient.requestNeverSent(
+            new ResourceAccessException("I/O error", new IOException("reset")))));
   }
 
   @Test

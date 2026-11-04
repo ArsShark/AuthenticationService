@@ -7,12 +7,17 @@ package com.innowise.authservice.exception;
  * <p>The message is constant: the real cause (an address, a status, a body) goes to the log, never
  * to the response.
  */
-public class UserServiceUnavailableException extends RuntimeException {
+public class UserServiceUnavailableException extends UserServiceCallException {
 
   /** The detail sent to the client. */
   public static final String MESSAGE = "The user service is not available";
 
-  public UserServiceUnavailableException() {
-    super(MESSAGE);
+  /**
+   * Creates the exception.
+   *
+   * @param outcomeUnknown see {@link UserServiceCallException#isOutcomeUnknown()}
+   */
+  public UserServiceUnavailableException(boolean outcomeUnknown) {
+    super(MESSAGE, outcomeUnknown);
   }
 }

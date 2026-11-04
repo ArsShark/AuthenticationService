@@ -10,6 +10,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import java.util.List;
 
@@ -64,6 +65,23 @@ final class UserServiceStub {
   static void createAnswers(int status) {
     SERVER.stubFor(post(urlEqualTo("/internal/users"))
         .willReturn(aResponse().withStatus(status)));
+  }
+
+  /** The creation answers with this status and this JSON body. */
+  static void createAnswers(int status, String jsonBody) {
+    SERVER.stubFor(post(urlEqualTo("/internal/users")).willReturn(aResponse()
+        .withStatus(status)
+        .withHeader("Content-Type", "application/json")
+        .withBody(jsonBody)));
+  }
+
+  /**
+   * The answer of the creation is lost: the connection breaks as soon as the request is read.
+   * The test does not wait for a timeout.
+   */
+  static void createLosesTheAnswer() {
+    SERVER.stubFor(post(urlEqualTo("/internal/users"))
+        .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
   }
 
   /** The creation answers 201 after this many milliseconds. */

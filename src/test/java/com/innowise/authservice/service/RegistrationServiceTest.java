@@ -95,14 +95,60 @@ class RegistrationServiceTest {
         () -> verify(users, never()).deleteByRegistrationId(any()));
   }
 
+  /** The answer may be lost after the profile was created: the profile must go. */
   @Test
-  void aUserServiceThatDoesNotAnswerLeavesNothingToUndo() {
-    when(users.create(any(), any())).thenThrow(new UserServiceTimeoutException());
+  void aTimeoutOfTheCreationUndoesTheProfileThatMayExist() {
+    UserServiceTimeoutException failure = new UserServiceTimeoutException(true);
+    when(users.create(any(), any())).thenThrow(failure);
+
+    UserServiceTimeoutException thrown = assertThrows(UserServiceTimeoutException.class,
+        () -> service().register(REQUEST));
 
     assertAll(
-        () -> assertThrows(UserServiceTimeoutException.class, () -> service().register(REQUEST)),
+        () -> assertSame(failure, thrown),
+        () -> verifyNoInteractions(credentials),
+        () -> verify(users).deleteByRegistrationId(sentRegistrationId()));
+  }
+
+  @Test
+  void anUnexpectedAnswerOfTheCreationUndoesTheProfileThatMayExist() {
+    UserServiceUnavailableException failure = new UserServiceUnavailableException(true);
+    when(users.create(any(), any())).thenThrow(failure);
+
+    UserServiceUnavailableException thrown = assertThrows(UserServiceUnavailableException.class,
+        () -> service().register(REQUEST));
+
+    assertAll(
+        () -> assertSame(failure, thrown),
+        () -> verifyNoInteractions(credentials),
+        () -> verify(users).deleteByRegistrationId(sentRegistrationId()));
+  }
+
+  /** The connection could not be opened, or the request was rejected: nothing was created. */
+  @Test
+  void aFailureThatCannotHaveCreatedAProfileIsNotUndone() {
+    when(users.create(any(), any()))
+        .thenThrow(new UserServiceUnavailableException(false))
+        .thenThrow(new UserServiceTimeoutException(false));
+
+    assertAll(
+        () -> assertThrows(UserServiceUnavailableException.class,
+            () -> service().register(REQUEST)),
+        () -> assertThrows(UserServiceTimeoutException.class,
+            () -> service().register(REQUEST)),
         () -> verifyNoInteractions(credentials),
         () -> verify(users, never()).deleteByRegistrationId(any()));
+  }
+
+  /** A failed undoing of a lost creation is logged; the caller still sees the first failure. */
+  @Test
+  void aFailedUndoingOfALostCreationKeepsTheOriginalError() {
+    UserServiceTimeoutException failure = new UserServiceTimeoutException(true);
+    when(users.create(any(), any())).thenThrow(failure);
+    doThrow(new UserServiceUnavailableException(true)).when(users).deleteByRegistrationId(any());
+
+    assertSame(failure, assertThrows(UserServiceTimeoutException.class,
+        () -> service().register(REQUEST)));
   }
 
   /** The login may be held by an account whose profile is gone: the new profile must go. */
@@ -140,7 +186,7 @@ class RegistrationServiceTest {
     when(users.create(any(), any())).thenReturn(CREATED);
     doThrow(new LoginAlreadyExistsException())
         .when(credentials).register(anyString(), anyString(), anyLong());
-    doThrow(new UserServiceUnavailableException()).when(users).deleteByRegistrationId(any());
+    doThrow(new UserServiceUnavailableException(true)).when(users).deleteByRegistrationId(any());
 
     RuntimeException thrown = assertThrows(RuntimeException.class,
         () -> service().register(REQUEST));
@@ -153,7 +199,7 @@ class RegistrationServiceTest {
     when(users.create(any(), any())).thenReturn(CREATED);
     IllegalStateException failure = new IllegalStateException("database is down");
     doThrow(failure).when(credentials).register(anyString(), anyString(), anyLong());
-    doThrow(new UserServiceTimeoutException()).when(users).deleteByRegistrationId(any());
+    doThrow(new UserServiceTimeoutException(true)).when(users).deleteByRegistrationId(any());
 
     assertSame(failure, assertThrows(IllegalStateException.class,
         () -> service().register(REQUEST)));

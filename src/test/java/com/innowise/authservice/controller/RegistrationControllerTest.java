@@ -130,7 +130,7 @@ class RegistrationControllerTest {
 
   @Test
   void aUserServiceThatIsNotAvailableIs502() throws Exception {
-    when(registrationService.register(any())).thenThrow(new UserServiceUnavailableException());
+    when(registrationService.register(any())).thenThrow(new UserServiceUnavailableException(true));
 
     register(VALID_BODY).andExpectAll(
         status().isBadGateway(),
@@ -139,7 +139,7 @@ class RegistrationControllerTest {
 
   @Test
   void aUserServiceThatIsTooSlowIs504() throws Exception {
-    when(registrationService.register(any())).thenThrow(new UserServiceTimeoutException());
+    when(registrationService.register(any())).thenThrow(new UserServiceTimeoutException(true));
 
     register(VALID_BODY).andExpectAll(
         status().isGatewayTimeout(),

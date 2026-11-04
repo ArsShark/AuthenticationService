@@ -98,8 +98,8 @@ class SecretsNotLoggedIntegrationTest extends AbstractIntegrationTest {
       internal(carol, INTERNAL_KEY).andExpect(status().isConflict());
       internal(carol, WRONG_INTERNAL_KEY).andExpect(status().isUnauthorized());
 
-      // The registration: a success, a taken login (the profile is undone), an unreachable
-      // User Service, and an invalid body.
+      // The registration: a success, a taken login (the profile is undone), an error and a lost
+      // answer of the User Service (the profile that may exist is undone), and an invalid body.
       String dave = String.format("""
           {"name": "%s", "surname": "%s", "birthDate": "1990-05-17",
            "email": "%s", "password": "%s"}
@@ -109,6 +109,8 @@ class SecretsNotLoggedIntegrationTest extends AbstractIntegrationTest {
       send("/api/auth/register", dave).andExpect(status().isCreated());
       send("/api/auth/register", dave).andExpect(status().isConflict());
       UserServiceStub.createAnswers(500);
+      send("/api/auth/register", dave).andExpect(status().isBadGateway());
+      UserServiceStub.createLosesTheAnswer();
       send("/api/auth/register", dave).andExpect(status().isBadGateway());
       send("/api/auth/register", dave.replace(DAVE_PASSWORD, "short"))
           .andExpect(status().isBadRequest());
@@ -129,6 +131,8 @@ class SecretsNotLoggedIntegrationTest extends AbstractIntegrationTest {
         () -> assertTrue(containsLine(lines, "valid tokens revoked"), "and the reuse warning"),
         () -> assertTrue(containsLine(lines, "User 51 registered"), "and the registration"),
         () -> assertTrue(containsLine(lines, "undoing it"), "and the undoing"),
+        () -> assertTrue(containsLine(lines, "The call to the user service failed"),
+            "and the lost answer"),
         () -> assertEquals(List.of(), leaked, "secrets found in the log"));
   }
 
