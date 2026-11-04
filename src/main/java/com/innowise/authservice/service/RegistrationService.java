@@ -7,6 +7,7 @@ import com.innowise.authservice.dto.request.RegisterRequest;
 import com.innowise.authservice.dto.response.RegisterResponse;
 import com.innowise.authservice.exception.EmailAlreadyRegisteredException;
 import com.innowise.authservice.exception.LoginAlreadyExistsException;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -15,14 +16,16 @@ import org.springframework.stereotype.Service;
  * Registers a user: creates the profile in the User Service, then saves the account here.
  *
  * <ol>
- *   <li>The profile is created with {@code POST /internal/users}. A taken email stops the flow
+ *   <li>The profile is created with {@code POST /internal/users}, together with a registration id:
+ *       a random UUID that this class chooses for every attempt. A taken email stops the flow
  *       here, with nothing to undo.
  *   <li>The account is saved by {@link CredentialService#register}, in its own short
  *       transaction, with the email exactly as the User Service stored it and the id of the
  *       profile.
  *   <li>If the account cannot be saved (the login is taken, the database fails), the profile is
- *       deleted again before the caller gets the error, so no profile without an account is left
- *       behind. The original error is the one the caller sees, whatever happens to the deletion.
+ *       deleted again by its registration id before the caller gets the error, so no profile
+ *       without an account is left behind. The original error is the one the caller sees,
+ *       whatever happens to the deletion.
  * </ol>
  *
  * <p>This class has no {@code @Transactional} on purpose: it calls another service over HTTP, and
@@ -60,15 +63,16 @@ public class RegistrationService {
    *     Service could not be reached or answered unexpectedly
    */
   public RegisterResponse register(RegisterRequest request) {
+    UUID registrationId = UUID.randomUUID();
     InternalUserResponse user = users.create(new InternalUserRequest(
-        request.name(), request.surname(), request.birthDate(), request.email()));
+        request.name(), request.surname(), request.birthDate(), request.email()), registrationId);
     try {
       credentials.register(user.email(), request.password(), user.id());
     } catch (LoginAlreadyExistsException e) {
-      undo(user.id(), e);
+      undo(registrationId, user.id(), e);
       throw new EmailAlreadyRegisteredException();
     } catch (RuntimeException e) {
-      undo(user.id(), e);
+      undo(registrationId, user.id(), e);
       throw e;
     }
     LOGGER.info("User {} registered", user.id());
@@ -77,17 +81,17 @@ public class RegistrationService {
   }
 
   /**
-   * Deletes the profile of a registration that failed. A failed deletion is logged with the id
-   * and does not hide the original error.
+   * Deletes the profile of a registration that failed, by the registration id. A failed deletion
+   * is logged with the ids and does not hide the original error.
    */
-  private void undo(Long userId, RuntimeException cause) {
-    LOGGER.warn("Registration of user {} failed ({}), undoing it", userId,
+  private void undo(UUID registrationId, Long userId, RuntimeException cause) {
+    LOGGER.warn("Registration {} of user {} failed ({}), undoing it", registrationId, userId,
         cause.getClass().getSimpleName());
     try {
-      users.delete(userId);
+      users.deleteByRegistrationId(registrationId);
     } catch (RuntimeException e) {
-      LOGGER.error("Undoing the registration of user {} is incomplete: the profile must be "
-          + "removed by hand ({})", userId, e.getClass().getSimpleName());
+      LOGGER.error("Undoing registration {} of user {} is incomplete: remove the profile ({})",
+          registrationId, userId, e.getClass().getSimpleName());
     }
   }
 }

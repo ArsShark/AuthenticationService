@@ -2,12 +2,16 @@ package com.innowise.authservice.integration;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.delete;
+import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.verification.LoggedRequest;
+import java.util.List;
 
 /**
  * The User Service of the integration tests: one WireMock server on a free port, shared by every
@@ -20,6 +24,11 @@ import com.github.tomakehurst.wiremock.WireMockServer;
  * {@code verify}.
  */
 final class UserServiceStub {
+
+  /** The path pattern of the deletion of a profile by its registration id. */
+  static final String BY_REGISTRATION_PATTERN = String.format(
+      "/internal/users/by-registration/%s",
+      "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 
   /** The started server. */
   static final WireMockServer SERVER = start();
@@ -63,9 +72,19 @@ final class UserServiceStub {
         .willReturn(aResponse().withStatus(201).withFixedDelay(delayMillis)));
   }
 
-  /** The deletion of any profile answers with this status. */
+  /** The deletion of any profile by registration id answers with this status. */
   static void deleteAnswers(int status) {
-    SERVER.stubFor(delete(urlPathMatching("/internal/users/\\d+"))
+    SERVER.stubFor(delete(urlPathMatching(BY_REGISTRATION_PATTERN))
         .willReturn(aResponse().withStatus(status)));
+  }
+
+  /** The creations of profiles received so far, oldest first. */
+  static List<LoggedRequest> creations() {
+    return SERVER.findAll(postRequestedFor(urlEqualTo("/internal/users")));
+  }
+
+  /** The deletions of profiles by registration id received so far, oldest first. */
+  static List<LoggedRequest> deletions() {
+    return SERVER.findAll(deleteRequestedFor(urlPathMatching(BY_REGISTRATION_PATTERN)));
   }
 }

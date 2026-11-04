@@ -1,9 +1,9 @@
 package com.innowise.authservice.integration;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.exactly;
+import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -21,8 +21,10 @@ import com.innowise.authservice.exception.UserServiceUnavailableException;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -57,8 +59,28 @@ class RegistrationIntegrationTest extends AbstractIntegrationTest {
   }
 
   private static int deleteCalls() {
-    return UserServiceStub.SERVER.findAll(
-        deleteRequestedFor(urlEqualTo("/internal/users/31"))).size();
+    return UserServiceStub.deletions().size();
+  }
+
+  /**
+   * The distinct registration ids of the requests: the header of a creation, the last path
+   * segment of a deletion.
+   */
+  private static Set<String> registrationIdsOf(List<LoggedRequest> requests) {
+    Set<String> ids = new HashSet<>();
+    for (LoggedRequest request : requests) {
+      String header = request.getHeader("X-Registration-Id");
+      ids.add(header != null ? header : request.getUrl().substring(
+          request.getUrl().lastIndexOf('/') + 1));
+    }
+    return ids;
+  }
+
+  /** The registration id of the one creation of the test, as the User Service received it. */
+  private static String sentRegistrationId() {
+    List<LoggedRequest> creations = UserServiceStub.creations();
+    assertEquals(1, creations.size());
+    return creations.get(0).getHeader("X-Registration-Id");
   }
 
   @Test
@@ -90,6 +112,7 @@ class RegistrationIntegrationTest extends AbstractIntegrationTest {
 
     UserServiceStub.SERVER.verify(exactly(1), postRequestedFor(urlEqualTo("/internal/users"))
         .withHeader("X-Internal-Key", equalTo("test-internal-key"))
+        .withHeader("X-Registration-Id", matching("[0-9a-f-]{36}"))
         .withRequestBody(equalToJson("""
             {"name": "Alice", "surname": "Smith", "birthDate": "1990-05-17",
              "email": "Alice@Example.com"}
@@ -157,7 +180,12 @@ class RegistrationIntegrationTest extends AbstractIntegrationTest {
 
     assertAll(
         () -> assertEquals(1, countAccounts()),
-        () -> assertEquals(1, deleteCalls()));
+        () -> assertEquals(1, deleteCalls()),
+        () -> assertEquals(
+            String.format("/internal/users/by-registration/%s", sentRegistrationId()),
+            UserServiceStub.deletions().get(0).getUrl()),
+        () -> assertEquals("test-internal-key",
+            UserServiceStub.deletions().get(0).getHeader("X-Internal-Key")));
   }
 
   @Test
@@ -242,7 +270,12 @@ class RegistrationIntegrationTest extends AbstractIntegrationTest {
           () -> assertEquals(1, statuses.stream().filter(s -> s == 201).count()),
           () -> assertEquals(3, statuses.stream().filter(s -> s == 409).count()),
           () -> assertEquals(1, countAccounts()),
-          () -> assertEquals(3, deleteCalls()));
+          () -> assertEquals(3, deleteCalls()),
+          // Four attempts with four ids; each loser removes only its own profile.
+          () -> assertEquals(4, registrationIdsOf(UserServiceStub.creations()).size()),
+          () -> assertEquals(3, registrationIdsOf(UserServiceStub.deletions()).size()),
+          () -> assertTrue(registrationIdsOf(UserServiceStub.creations())
+              .containsAll(registrationIdsOf(UserServiceStub.deletions()))));
     } finally {
       pool.shutdownNow();
     }

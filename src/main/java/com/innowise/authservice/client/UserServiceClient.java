@@ -5,6 +5,7 @@ import com.innowise.authservice.exception.UserServiceTimeoutException;
 import com.innowise.authservice.exception.UserServiceUnavailableException;
 import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -20,6 +21,11 @@ import org.springframework.web.client.RestClientResponseException;
 /**
  * Calls the internal endpoints of the User Service: creates a profile and removes it again.
  *
+ * <p>Every creation carries a registration id, a random UUID chosen by the caller for one
+ * attempt to register ({@code X-Registration-Id}). The User Service stores it with the profile,
+ * so the profile of an attempt can be removed by that id even when the answer of the creation was
+ * lost and the id of the profile is not known.
+ *
  * <p>What goes wrong is turned into three exceptions, so the registration does not depend on
  * HTTP details: a taken email is {@link EmailAlreadyRegisteredException}, a call that ran out of
  * time is {@link UserServiceTimeoutException}, and anything else (no connection, an error status,
@@ -29,6 +35,9 @@ import org.springframework.web.client.RestClientResponseException;
  */
 @Component
 public class UserServiceClient {
+
+  /** The header with the registration id of the creation. */
+  public static final String REGISTRATION_ID_HEADER = "X-Registration-Id";
 
   private static final Logger LOGGER = LoggerFactory.getLogger(UserServiceClient.class);
 
@@ -42,16 +51,18 @@ public class UserServiceClient {
    * Creates a profile ({@code POST /internal/users}).
    *
    * @param request the data of the profile
+   * @param registrationId the id of this attempt to register; the profile can be removed by it
    * @return the new profile, with its id and the email as the User Service stored it
    * @throws EmailAlreadyRegisteredException if the User Service answers 409
    * @throws UserServiceTimeoutException if the call ran out of time
    * @throws UserServiceUnavailableException for every other failure
    */
-  public InternalUserResponse create(InternalUserRequest request) {
+  public InternalUserResponse create(InternalUserRequest request, UUID registrationId) {
     InternalUserResponse user;
     try {
       user = restClient.post()
           .uri("/internal/users")
+          .header(REGISTRATION_ID_HEADER, registrationId.toString())
           .contentType(MediaType.APPLICATION_JSON)
           .body(request)
           .retrieve()
@@ -67,21 +78,24 @@ public class UserServiceClient {
   }
 
   /**
-   * Removes a profile ({@code DELETE /internal/users/{id}}). A profile that is already gone
-   * (404) is not an error: the call can be repeated safely.
+   * Removes the profile that was created with this registration id
+   * ({@code DELETE /internal/users/by-registration/{registrationId}}). A profile that does not
+   * exist (404) is not an error: the creation may never have happened, or the profile is already
+   * gone, so the call can be repeated safely. Only the profile of that one attempt is affected,
+   * never another profile with the same email.
    *
-   * @param id the id of the profile
+   * @param registrationId the id sent with the creation
    * @throws UserServiceTimeoutException if the call ran out of time
    * @throws UserServiceUnavailableException for every other failure
    */
-  public void delete(Long id) {
+  public void deleteByRegistrationId(UUID registrationId) {
     try {
       restClient.delete()
-          .uri("/internal/users/{id}", id)
+          .uri("/internal/users/by-registration/{registrationId}", registrationId)
           .retrieve()
           .toBodilessEntity();
     } catch (HttpClientErrorException.NotFound e) {
-      LOGGER.info("Profile {} was already gone", id);
+      LOGGER.info("No profile exists for registration {}", registrationId);
     } catch (RestClientException e) {
       throw translate(e, false);
     }

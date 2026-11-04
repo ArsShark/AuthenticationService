@@ -23,6 +23,7 @@ import com.innowise.authservice.exception.UserServiceTimeoutException;
 import com.innowise.authservice.exception.UserServiceUnavailableException;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,10 @@ import org.junit.jupiter.api.Test;
 class UserServiceClientTest {
 
   private static final String KEY = "test-internal-key";
+  private static final UUID REGISTRATION_ID =
+      UUID.fromString("0b9c4b5e-6f3e-4a56-9d3a-5f6f0d2a7c11");
+  private static final String DELETE_PATH =
+      "/internal/users/by-registration/0b9c4b5e-6f3e-4a56-9d3a-5f6f0d2a7c11";
 
   /** Never reached by a test that is not about timeouts. */
   private static final Duration GENEROUS_TIMEOUT = Duration.ofSeconds(10);
@@ -77,7 +82,7 @@ class UserServiceClientTest {
   }
 
   @Test
-  void createSendsTheProfileWithTheKeyAndReturnsTheStoredForm() {
+  void createSendsTheProfileWithTheKeyAndTheRegistrationIdAndReturnsTheStoredForm() {
     userService.stubFor(post(urlEqualTo("/internal/users")).willReturn(aResponse()
         .withStatus(201)
         .withHeader("Content-Type", "application/json")
@@ -87,7 +92,7 @@ class UserServiceClientTest {
              "createdAt": "2026-10-31T10:00:00Z", "updatedAt": "2026-10-31T10:00:00Z"}
             """)));
 
-    InternalUserResponse user = client.create(REQUEST);
+    InternalUserResponse user = client.create(REQUEST, REGISTRATION_ID);
 
     assertAll(
         () -> assertEquals(31L, user.id()),
@@ -95,6 +100,7 @@ class UserServiceClientTest {
         () -> assertEquals(LocalDate.of(1990, 5, 17), user.birthDate()),
         () -> userService.verify(postRequestedFor(urlEqualTo("/internal/users"))
             .withHeader("X-Internal-Key", equalTo(KEY))
+            .withHeader("X-Registration-Id", equalTo(REGISTRATION_ID.toString()))
             .withHeader("Content-Type", equalTo("application/json"))
             .withRequestBody(equalToJson("""
                 {"name": "Alice", "surname": "Smith", "birthDate": "1990-05-17",
@@ -107,7 +113,8 @@ class UserServiceClientTest {
     userService.stubFor(post(urlEqualTo("/internal/users"))
         .willReturn(aResponse().withStatus(409)));
 
-    assertThrows(EmailAlreadyRegisteredException.class, () -> client.create(REQUEST));
+    assertThrows(EmailAlreadyRegisteredException.class,
+        () -> client.create(REQUEST, REGISTRATION_ID));
   }
 
   @Test
@@ -116,7 +123,8 @@ class UserServiceClientTest {
         .willReturn(aResponse().withStatus(500).withBody("secret details")));
 
     UserServiceUnavailableException error =
-        assertThrows(UserServiceUnavailableException.class, () -> client.create(REQUEST));
+        assertThrows(UserServiceUnavailableException.class,
+            () -> client.create(REQUEST, REGISTRATION_ID));
 
     assertEquals(UserServiceUnavailableException.MESSAGE, error.getMessage());
   }
@@ -126,7 +134,8 @@ class UserServiceClientTest {
     userService.stubFor(post(urlEqualTo("/internal/users"))
         .willReturn(aResponse().withStatus(400)));
 
-    assertThrows(UserServiceUnavailableException.class, () -> client.create(REQUEST));
+    assertThrows(UserServiceUnavailableException.class,
+        () -> client.create(REQUEST, REGISTRATION_ID));
   }
 
   @Test
@@ -136,7 +145,8 @@ class UserServiceClientTest {
         .withHeader("Content-Type", "application/json")
         .withBody("{\"email\": \"alice@example.com\"}")));
 
-    assertThrows(UserServiceUnavailableException.class, () -> client.create(REQUEST));
+    assertThrows(UserServiceUnavailableException.class,
+        () -> client.create(REQUEST, REGISTRATION_ID));
   }
 
   @Test
@@ -146,7 +156,8 @@ class UserServiceClientTest {
         .withHeader("Content-Type", "application/json")
         .withBody("not json")));
 
-    assertThrows(UserServiceUnavailableException.class, () -> client.create(REQUEST));
+    assertThrows(UserServiceUnavailableException.class,
+        () -> client.create(REQUEST, REGISTRATION_ID));
   }
 
   @Test
@@ -156,7 +167,8 @@ class UserServiceClientTest {
     UserServiceClient impatient =
         clientFor(userService.baseUrl(), GENEROUS_TIMEOUT, SHORT_READ_TIMEOUT);
 
-    assertThrows(UserServiceTimeoutException.class, () -> impatient.create(REQUEST));
+    assertThrows(UserServiceTimeoutException.class,
+        () -> impatient.create(REQUEST, REGISTRATION_ID));
   }
 
   @Test
@@ -166,53 +178,57 @@ class UserServiceClientTest {
 
     UserServiceClient offline = clientFor(address, GENEROUS_TIMEOUT, GENEROUS_TIMEOUT);
 
-    assertThrows(UserServiceUnavailableException.class, () -> offline.create(REQUEST));
+    assertThrows(UserServiceUnavailableException.class,
+        () -> offline.create(REQUEST, REGISTRATION_ID));
   }
 
   @Test
-  void deleteSendsTheKeyAndAcceptsNoContent() {
-    userService.stubFor(delete(urlEqualTo("/internal/users/31"))
+  void deleteByRegistrationIdSendsTheKeyAndAcceptsNoContent() {
+    userService.stubFor(delete(urlEqualTo(DELETE_PATH))
         .willReturn(aResponse().withStatus(204)));
 
     assertAll(
-        () -> assertDoesNotThrow(() -> client.delete(31L)),
-        () -> userService.verify(deleteRequestedFor(urlEqualTo("/internal/users/31"))
+        () -> assertDoesNotThrow(() -> client.deleteByRegistrationId(REGISTRATION_ID)),
+        () -> userService.verify(deleteRequestedFor(urlEqualTo(DELETE_PATH))
             .withHeader("X-Internal-Key", equalTo(KEY))));
   }
 
-  /** A profile that is already gone makes the undoing safe to repeat. */
+  /** A profile that does not exist makes the undoing safe to repeat (and safe when unneeded). */
   @Test
-  void deleteOfAProfileThatIsGoneIsNotAnError() {
-    userService.stubFor(delete(urlEqualTo("/internal/users/31"))
+  void deleteOfAProfileThatDoesNotExistIsNotAnError() {
+    userService.stubFor(delete(urlEqualTo(DELETE_PATH))
         .willReturn(aResponse().withStatus(404)));
 
-    assertDoesNotThrow(() -> client.delete(31L));
+    assertDoesNotThrow(() -> client.deleteByRegistrationId(REGISTRATION_ID));
   }
 
   @Test
   void deleteWithAnErrorStatusIsUnavailable() {
-    userService.stubFor(delete(urlEqualTo("/internal/users/31"))
+    userService.stubFor(delete(urlEqualTo(DELETE_PATH))
         .willReturn(aResponse().withStatus(500)));
 
-    assertThrows(UserServiceUnavailableException.class, () -> client.delete(31L));
+    assertThrows(UserServiceUnavailableException.class,
+        () -> client.deleteByRegistrationId(REGISTRATION_ID));
   }
 
   @Test
   void deleteThatIsTooSlowIsATimeout() {
-    userService.stubFor(delete(urlEqualTo("/internal/users/31"))
+    userService.stubFor(delete(urlEqualTo(DELETE_PATH))
         .willReturn(aResponse().withStatus(204).withFixedDelay(SLOW_ANSWER_MILLIS)));
     UserServiceClient impatient =
         clientFor(userService.baseUrl(), GENEROUS_TIMEOUT, SHORT_READ_TIMEOUT);
 
-    assertThrows(UserServiceTimeoutException.class, () -> impatient.delete(31L));
+    assertThrows(UserServiceTimeoutException.class,
+        () -> impatient.deleteByRegistrationId(REGISTRATION_ID));
   }
 
   /** A 401 means a wrong key: it must not be taken for "already gone". */
   @Test
   void deleteWithAWrongKeyIsUnavailable() {
-    userService.stubFor(delete(urlEqualTo("/internal/users/31"))
+    userService.stubFor(delete(urlEqualTo(DELETE_PATH))
         .willReturn(aResponse().withStatus(401)));
 
-    assertThrows(UserServiceUnavailableException.class, () -> client.delete(31L));
+    assertThrows(UserServiceUnavailableException.class,
+        () -> client.deleteByRegistrationId(REGISTRATION_ID));
   }
 }
