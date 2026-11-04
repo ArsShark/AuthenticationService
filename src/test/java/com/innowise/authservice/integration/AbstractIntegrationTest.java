@@ -29,7 +29,11 @@ import org.springframework.test.web.servlet.MockMvc;
  * a test. The signing key of the tokens cannot be a constant of an annotation, because it is
  * generated at runtime, and the address of the User Service (a WireMock server) is not known
  * before it starts; both are set by {@link #jwtProperties(DynamicPropertyRegistry)} for the same
- * shared context. Tests are not
+ * shared context. The read timeout of the User Service client is 5 s: the first request of the
+ * run goes to a cold stub through a cold client, and a test that is not about timeouts must not
+ * depend on the speed of the machine. The one test that needs a real timeout sets the delay of
+ * its stub far above 5 s; a lost answer is better simulated with a fault of the stub, which
+ * needs no waiting. Tests are not
  * {@code @Transactional}, so they see real commits; {@link #resetState()} cleans up before every
  * test.
  */
@@ -38,7 +42,7 @@ import org.springframework.test.web.servlet.MockMvc;
     "app.internal.api-key=test-internal-key",
     "app.admin.login=",
     "app.admin.password=",
-    "app.user-service.read-timeout=1s"
+    "app.user-service.read-timeout=5s"
 })
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, TestClockConfiguration.class})

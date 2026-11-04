@@ -31,11 +31,26 @@ import org.junit.jupiter.api.Test;
  * Tests {@link UserServiceClient} against a WireMock server that plays the User Service: what it
  * sends (path, key, body) and what it makes of every kind of answer.
  *
+ * <p>The timeouts of the shared client are generous on purpose: the first request to a cold
+ * WireMock server (and a cold HTTP client) can take seconds on a busy machine, and a test that is
+ * not about timeouts must never depend on how fast the machine is. A short timeout is used only
+ * by the two tests of timeouts, and there the stub delay is ten times longer than the timeout,
+ * so a slow machine cannot make them fail.
+ *
  * <p>The profile id (31) is easy to tell from the other numbers of the test.
  */
 class UserServiceClientTest {
 
   private static final String KEY = "test-internal-key";
+
+  /** Never reached by a test that is not about timeouts. */
+  private static final Duration GENEROUS_TIMEOUT = Duration.ofSeconds(10);
+
+  /** The read timeout of the tests of timeouts; the stub delay is far above it. */
+  private static final Duration SHORT_READ_TIMEOUT = Duration.ofMillis(300);
+
+  /** The delay of a slow stub: ten times the short read timeout. */
+  private static final int SLOW_ANSWER_MILLIS = 3000;
   private static final InternalUserRequest REQUEST = new InternalUserRequest(
       "Alice", "Smith", LocalDate.of(1990, 5, 17), "Alice@Example.com");
 
@@ -46,7 +61,7 @@ class UserServiceClientTest {
   void setUp() {
     userService = new WireMockServer(options().dynamicPort());
     userService.start();
-    client = clientFor(userService.baseUrl(), Duration.ofMillis(500));
+    client = clientFor(userService.baseUrl(), GENEROUS_TIMEOUT, GENEROUS_TIMEOUT);
   }
 
   @AfterEach
@@ -54,9 +69,10 @@ class UserServiceClientTest {
     userService.stop();
   }
 
-  private static UserServiceClient clientFor(String baseUri, Duration readTimeout) {
+  private static UserServiceClient clientFor(String baseUri, Duration connectTimeout,
+      Duration readTimeout) {
     return new UserServiceClient(new UserServiceClientConfig().userServiceRestClient(
-        new UserServiceProperties(baseUri, Duration.ofSeconds(1), readTimeout),
+        new UserServiceProperties(baseUri, connectTimeout, readTimeout),
         new InternalApiProperties(KEY)));
   }
 
@@ -136,9 +152,11 @@ class UserServiceClientTest {
   @Test
   void aSlowAnswerIsATimeout() {
     userService.stubFor(post(urlEqualTo("/internal/users"))
-        .willReturn(aResponse().withStatus(201).withFixedDelay(2000)));
+        .willReturn(aResponse().withStatus(201).withFixedDelay(SLOW_ANSWER_MILLIS)));
+    UserServiceClient impatient =
+        clientFor(userService.baseUrl(), GENEROUS_TIMEOUT, SHORT_READ_TIMEOUT);
 
-    assertThrows(UserServiceTimeoutException.class, () -> client.create(REQUEST));
+    assertThrows(UserServiceTimeoutException.class, () -> impatient.create(REQUEST));
   }
 
   @Test
@@ -146,7 +164,7 @@ class UserServiceClientTest {
     String address = userService.baseUrl();
     userService.stop();
 
-    UserServiceClient offline = clientFor(address, Duration.ofMillis(500));
+    UserServiceClient offline = clientFor(address, GENEROUS_TIMEOUT, GENEROUS_TIMEOUT);
 
     assertThrows(UserServiceUnavailableException.class, () -> offline.create(REQUEST));
   }
@@ -182,9 +200,11 @@ class UserServiceClientTest {
   @Test
   void deleteThatIsTooSlowIsATimeout() {
     userService.stubFor(delete(urlEqualTo("/internal/users/31"))
-        .willReturn(aResponse().withStatus(204).withFixedDelay(2000)));
+        .willReturn(aResponse().withStatus(204).withFixedDelay(SLOW_ANSWER_MILLIS)));
+    UserServiceClient impatient =
+        clientFor(userService.baseUrl(), GENEROUS_TIMEOUT, SHORT_READ_TIMEOUT);
 
-    assertThrows(UserServiceTimeoutException.class, () -> client.delete(31L));
+    assertThrows(UserServiceTimeoutException.class, () -> impatient.delete(31L));
   }
 
   /** A 401 means a wrong key: it must not be taken for "already gone". */

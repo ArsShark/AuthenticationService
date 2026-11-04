@@ -188,7 +188,8 @@ class RegistrationIntegrationTest extends AbstractIntegrationTest {
 
   @Test
   void aSlowUserServiceIs504WithNothingLeftBehind() throws Exception {
-    UserServiceStub.createAnswersSlowly(3000);
+    // Far above the read timeout of the shared context (5 s).
+    UserServiceStub.createAnswersSlowly(7000);
 
     register(BODY).andExpectAll(
         status().isGatewayTimeout(),
