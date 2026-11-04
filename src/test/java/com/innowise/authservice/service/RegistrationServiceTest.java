@@ -58,7 +58,9 @@ class RegistrationServiceTest {
   private CredentialService credentials;
 
   private RegistrationService service() {
-    return new RegistrationService(users, credentials);
+    // The real remover with a pause that returns at once: a failed deletion is repeated.
+    return new RegistrationService(users, credentials,
+        new ProfileRemover(users, duration -> { }));
   }
 
   /** The registration id that the creation of the profile was called with (exactly once). */

@@ -112,6 +112,9 @@ class SecretsNotLoggedIntegrationTest extends AbstractIntegrationTest {
       send("/api/auth/register", dave).andExpect(status().isBadGateway());
       UserServiceStub.createLosesTheAnswer();
       send("/api/auth/register", dave).andExpect(status().isBadGateway());
+      // A lost answer and a deletion that fails every time: the ERROR line names the id only.
+      UserServiceStub.deleteAnswers(500);
+      send("/api/auth/register", dave).andExpect(status().isBadGateway());
       send("/api/auth/register", dave.replace(DAVE_PASSWORD, "short"))
           .andExpect(status().isBadRequest());
     } finally {
@@ -133,6 +136,8 @@ class SecretsNotLoggedIntegrationTest extends AbstractIntegrationTest {
         () -> assertTrue(containsLine(lines, "undoing it"), "and the undoing"),
         () -> assertTrue(containsLine(lines, "The call to the user service failed"),
             "and the lost answer"),
+        () -> assertTrue(containsLine(lines, "is incomplete after 3 attempts"),
+            "and the undoing that gave up"),
         () -> assertEquals(List.of(), leaked, "secrets found in the log"));
   }
 

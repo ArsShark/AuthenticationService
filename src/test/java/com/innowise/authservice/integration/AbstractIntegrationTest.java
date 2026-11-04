@@ -45,7 +45,8 @@ import org.springframework.test.web.servlet.MockMvc;
     "app.user-service.read-timeout=5s"
 })
 @AutoConfigureMockMvc
-@Import({TestcontainersConfiguration.class, TestClockConfiguration.class})
+@Import({TestcontainersConfiguration.class, TestClockConfiguration.class,
+    TestPauseConfiguration.class})
 public abstract class AbstractIntegrationTest {
 
   /** The time of the test clock at the start of every test; far in the past on purpose. */
@@ -64,6 +65,9 @@ public abstract class AbstractIntegrationTest {
   @Autowired
   protected MutableClock clock;
 
+  @Autowired
+  protected RecordingPause pause;
+
   /**
    * Gives the shared context the signing key of the tokens, generated once per test run.
    *
@@ -80,6 +84,7 @@ public abstract class AbstractIntegrationTest {
   void resetState() {
     jdbcTemplate.execute("TRUNCATE refresh_tokens, credentials RESTART IDENTITY");
     UserServiceStub.reset();
+    pause.reset();
     clock.set(START);
   }
 

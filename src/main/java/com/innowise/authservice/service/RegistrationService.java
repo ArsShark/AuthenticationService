@@ -29,8 +29,9 @@ import org.springframework.stereotype.Service;
  *       profile.
  *   <li>If the account cannot be saved (the login is taken, the database fails), the profile is
  *       deleted again by its registration id before the caller gets the error, so no profile
- *       without an account is left behind. The original error is the one the caller sees,
- *       whatever happens to the deletion.
+ *       without an account is left behind. A failed deletion is repeated, see
+ *       {@link ProfileRemover}. The original error is the one the caller sees, whatever happens
+ *       to the deletion.
  * </ol>
  *
  * <p>This class has no {@code @Transactional} on purpose: it calls another service over HTTP, and
@@ -51,10 +52,13 @@ public class RegistrationService {
 
   private final UserServiceClient users;
   private final CredentialService credentials;
+  private final ProfileRemover profileRemover;
 
-  public RegistrationService(UserServiceClient users, CredentialService credentials) {
+  public RegistrationService(UserServiceClient users, CredentialService credentials,
+      ProfileRemover profileRemover) {
     this.users = users;
     this.credentials = credentials;
+    this.profileRemover = profileRemover;
   }
 
   /**
@@ -96,17 +100,12 @@ public class RegistrationService {
   }
 
   /**
-   * Deletes the profile of a registration that failed, by the registration id. A failed deletion
-   * is logged with the registration id and does not hide the original error.
+   * Deletes the profile of a registration that failed, by the registration id; the remover
+   * repeats a failed deletion and never throws, so the original error is the one that is thrown.
    */
   private void undo(UUID registrationId, RuntimeException cause) {
     LOGGER.warn("Registration {} failed ({}), undoing it", registrationId,
         cause.getClass().getSimpleName());
-    try {
-      users.deleteByRegistrationId(registrationId);
-    } catch (RuntimeException e) {
-      LOGGER.error("Undoing registration {} is incomplete: remove its profile ({})",
-          registrationId, e.getClass().getSimpleName());
-    }
+    profileRemover.remove(registrationId);
   }
 }

@@ -20,6 +20,7 @@ import com.innowise.authservice.exception.UserServiceTimeoutException;
 import com.innowise.authservice.exception.UserServiceUnavailableException;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -196,8 +197,10 @@ class RegistrationIntegrationTest extends AbstractIntegrationTest {
             UserServiceStub.deletions().get(0).getHeader("X-Internal-Key")));
   }
 
+  /** The undoing is tried three times, with the two pauses, and then given up: still a 409. */
   @Test
-  void aFailedUndoingStillAnswers409() throws Exception {
+  void anUndoingThatKeepsFailingIsGivenUpAfterThreeAttemptsAndStillAnswers409()
+      throws Exception {
     insertCredential("alice@example.com", "USER", 99L);
     UserServiceStub.createsProfile(31L, "alice@example.com");
     UserServiceStub.deleteAnswers(500);
@@ -206,7 +209,54 @@ class RegistrationIntegrationTest extends AbstractIntegrationTest {
 
     assertAll(
         () -> assertEquals(1, countAccounts()),
-        () -> assertEquals(1, deleteCalls()));
+        () -> assertEquals(3, deleteCalls()),
+        () -> assertEquals(1, registrationIdsOf(UserServiceStub.deletions()).size()),
+        () -> assertEquals(List.of(Duration.ofMillis(200), Duration.ofMillis(400)),
+            pause.pauses()));
+  }
+
+  /** A deletion that fails once and then works: the profile is removed, the caller sees a 409. */
+  @Test
+  void aFailedUndoingIsRepeatedAndWorks() throws Exception {
+    insertCredential("alice@example.com", "USER", 99L);
+    UserServiceStub.createsProfile(31L, "alice@example.com");
+    UserServiceStub.deleteAnswersInOrder(500, 204);
+
+    register(BODY).andExpect(status().isConflict());
+
+    assertAll(
+        () -> assertEquals(2, deleteCalls()),
+        () -> assertEquals(1, registrationIdsOf(UserServiceStub.deletions()).size()),
+        () -> assertEquals(List.of(Duration.ofMillis(200)), pause.pauses()));
+  }
+
+  /** A lost answer and a User Service that is still down for the first two deletions. */
+  @Test
+  void aLostAnswerIsUndoneAfterTwoFailedDeletions() throws Exception {
+    UserServiceStub.createLosesTheAnswer();
+    UserServiceStub.deleteAnswersInOrder(503, 500, 204);
+
+    register(BODY).andExpect(status().isBadGateway());
+
+    assertAll(
+        () -> assertEquals(0, countAccounts()),
+        () -> assertEquals(3, deleteCalls()),
+        () -> assertEquals(1, registrationIdsOf(UserServiceStub.deletions()).size()),
+        () -> assertEquals(sentRegistrationId(),
+            registrationIdsOf(UserServiceStub.deletions()).iterator().next()),
+        () -> assertEquals(List.of(Duration.ofMillis(200), Duration.ofMillis(400)),
+            pause.pauses()));
+  }
+
+  /** A deletion that works at once never pauses. */
+  @Test
+  void aDeletionThatWorksNeverPauses() throws Exception {
+    UserServiceStub.createLosesTheAnswer();
+    UserServiceStub.deleteAnswers(204);
+
+    register(BODY).andExpect(status().isBadGateway());
+
+    assertEquals(List.of(), pause.pauses());
   }
 
   /** A 5xx may come after the profile was created: the profile of this attempt is removed. */

@@ -11,6 +11,7 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.http.Fault;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import java.util.List;
 
@@ -94,6 +95,24 @@ final class UserServiceStub {
   static void deleteAnswers(int status) {
     SERVER.stubFor(delete(urlPathMatching(BY_REGISTRATION_PATTERN))
         .willReturn(aResponse().withStatus(status)));
+  }
+
+  /**
+   * The deletions answer with these statuses one after the other, and the last status repeats.
+   * It is a WireMock scenario, so the order is exact and no test has to wait.
+   */
+  static void deleteAnswersInOrder(int... statuses) {
+    String state = Scenario.STARTED;
+    for (int i = 0; i < statuses.length; i++) {
+      boolean last = i == statuses.length - 1;
+      String next = last ? state : String.format("deletion-%d", i + 1);
+      SERVER.stubFor(delete(urlPathMatching(BY_REGISTRATION_PATTERN))
+          .inScenario("deletion")
+          .whenScenarioStateIs(state)
+          .willSetStateTo(next)
+          .willReturn(aResponse().withStatus(statuses[i])));
+      state = next;
+    }
   }
 
   /** The creations of profiles received so far, oldest first. */
