@@ -63,6 +63,15 @@ class RegistrationServiceTest {
         new ProfileRemover(users, duration -> { }));
   }
 
+  /**
+   * Checks that the profile was deleted by the id that the creation sent. The id is read first:
+   * a {@code verify} must not be nested in the arguments of another {@code verify}.
+   */
+  private void verifyUndoneByTheSentId() {
+    UUID id = sentRegistrationId();
+    verify(users).deleteByRegistrationId(id);
+  }
+
   /** The registration id that the creation of the profile was called with (exactly once). */
   private UUID sentRegistrationId() {
     ArgumentCaptor<UUID> id = ArgumentCaptor.forClass(UUID.class);
@@ -109,7 +118,7 @@ class RegistrationServiceTest {
     assertAll(
         () -> assertSame(failure, thrown),
         () -> verifyNoInteractions(credentials),
-        () -> verify(users).deleteByRegistrationId(sentRegistrationId()));
+        this::verifyUndoneByTheSentId);
   }
 
   @Test
@@ -123,7 +132,7 @@ class RegistrationServiceTest {
     assertAll(
         () -> assertSame(failure, thrown),
         () -> verifyNoInteractions(credentials),
-        () -> verify(users).deleteByRegistrationId(sentRegistrationId()));
+        this::verifyUndoneByTheSentId);
   }
 
   /** The connection could not be opened, or the request was rejected: nothing was created. */
@@ -165,7 +174,7 @@ class RegistrationServiceTest {
 
     assertAll(
         () -> assertEquals(EmailAlreadyRegisteredException.MESSAGE, error.getMessage()),
-        () -> verify(users).deleteByRegistrationId(sentRegistrationId()));
+        this::verifyUndoneByTheSentId);
   }
 
   @Test
@@ -179,7 +188,7 @@ class RegistrationServiceTest {
 
     assertAll(
         () -> assertSame(failure, thrown),
-        () -> verify(users).deleteByRegistrationId(sentRegistrationId()));
+        this::verifyUndoneByTheSentId);
   }
 
   /** A failed undoing is logged, and the caller still sees why the registration failed. */
