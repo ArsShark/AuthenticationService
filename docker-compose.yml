@@ -28,9 +28,16 @@ services:
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-P7D}
       # The other services check the same value in the "iss" claim.
       JWT_ISSUER: ${JWT_ISSUER:-authentication-service}
+      # Where the registration creates the profile. In a standalone Compose the User Service runs on
+      # the host, so the default is the host; the Compose of the whole system sets the service name.
+      USER_SERVICE_URI: ${USER_SERVICE_URI:-http://host.docker.internal:8082}
       # The first admin: set both or neither. Both empty means that no admin is created.
       ADMIN_LOGIN: ${ADMIN_LOGIN:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    # host.docker.internal is the host of the machine (the User Service runs there when this file
+    # is used alone).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8081:8081"
     volumes:

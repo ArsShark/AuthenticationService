@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/changes/001-credentials.yaml
   - include:
       file: db/changelog/changes/002-refresh-tokens.yaml
+  - include:
+      file: db/changelog/changes/003-rename-credentials-login-to-username.yaml

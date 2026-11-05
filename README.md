@@ -4,9 +4,9 @@ Part of the e-commerce microservice application (Innowise Java Advanced course).
 The service stores user credentials, logs users in and issues, refreshes and validates JWT
 tokens. It also publishes the public key that the other services use to verify the tokens.
 
-**Status:** accounts, login, refresh, validation and the public key (JWKS) are ready, and the
+**Status:** registration, login, refresh, validation and the public key (JWKS) are ready, and the
 service runs in Docker (Dockerfile and Compose file). User Service already verifies the tokens;
-the API Gateway starts to use them in its own pull request.
+the API Gateway uses them in its own pull request.
 
 ## Requirements
 
@@ -32,6 +32,7 @@ All settings are environment variables.
 | `JWT_ACCESS_TTL` | `PT15M` | Lifetime of an access token (ISO-8601 duration) |
 | `JWT_REFRESH_TTL` | `P7D` | Lifetime of a refresh token (ISO-8601 duration) |
 | `JWT_ISSUER` | `authentication-service` | The `iss` claim of every token; the services that verify tokens expect the same value |
+| `USER_SERVICE_URI` | `http://localhost:8082` (`local`), `http://user-service:8082` (`docker`) | Internal address of the User Service, called during a registration (never the API Gateway) |
 | `ADMIN_LOGIN` | empty | Login (an email) of the first admin, see below |
 | `ADMIN_PASSWORD` | empty | Password of the first admin, see below |
 
@@ -197,11 +198,53 @@ Errors are RFC 9457 `application/problem+json`. Responses that carry tokens are 
 
 | Endpoint | Who may call it |
 |---|---|
+| `POST /api/auth/register` | Anybody |
 | `POST /api/auth/login` | Anybody |
 | `POST /api/auth/refresh` | Anybody (the refresh token is the credential) |
 | `POST /api/auth/validate` | Anybody |
 | `GET /.well-known/jwks.json` | Anybody, but meant for the other services: the Gateway does not route it |
 | `POST /internal/credentials` | The internal caller only, with `X-Internal-Key` |
+
+### Register: `POST /api/auth/register`
+
+Creates a user: the profile in the User Service and the account here (role `USER`, the email is
+the login). There is no token in the answer, the user logs in next.
+
+```json
+{"name": "Alice", "surname": "Smith", "birthDate": "1990-05-17",
+ "email": "alice@example.com", "password": "s3cret-passw0rd"}
+```
+
+The answer is `201` with the new profile (`id`, `name`, `surname`, `birthDate`, `email` in the
+stored lowercase form).
+
+| Status | When |
+|---|---|
+| `400` | The body is invalid (`errors` lists `{field, message}` sorted by field, without the values), checked before any call |
+| `409` | The email is taken, in the User Service or here: `An account with this email already exists` |
+| `502` | The User Service cannot be reached or answers with an error |
+| `504` | The User Service does not answer in time (2 s to connect, 5 s to answer) |
+
+The flow: the service chooses a random **registration id** for the attempt, creates the profile
+with `POST /internal/users` (headers `X-Internal-Key` and `X-Registration-Id`; the User Service
+stores the id with the profile), then saves the account with the email exactly as the User Service
+stored it. The profile is deleted again with `DELETE /internal/users/by-registration/{id}` (a
+`404` there means "already gone", so the call can be repeated) in two cases:
+
+- the account cannot be saved (the login is taken, the database fails);
+- the creation ended without a usable answer although the profile may exist: the answer timed
+  out, the connection broke, the User Service or a proxy in front of it answered `5xx`, or a
+  created answer has no id. The id of the profile is not known then, but the registration id is.
+
+The profile is not deleted when it certainly was not created: the connection could not be
+opened, or the User Service rejected the request with a `4xx`. The registration id belongs to one
+attempt, so the deletion can never remove the profile of another registration of the same email.
+
+A failed deletion is repeated: three attempts in all, with pauses of 200 ms and 400 ms. If every
+attempt fails, an `ERROR` with the registration id is logged and the caller still gets the
+original error. So, as long as the User Service can be reached for the deletion, a failed
+registration leaves no profile behind. The service has no transaction around the HTTP call, which
+would hold a database connection while the User Service answers.
 
 ### Log in: `POST /api/auth/login`
 
@@ -350,7 +393,7 @@ and there is no clock skew: an expired token is expired.
 | Claim | Access token | Refresh token |
 |---|---|---|
 | `sub` | the id of the account | the id of the account |
-| `userId` | the id of the profile in User Service; absent for an admin without a profile | not present |
+| `user_id` | the id of the profile in User Service; absent for an admin without a profile | not present |
 | `role` | `ADMIN` or `USER` (without a `ROLE_` prefix) | not present |
 | `email` | the login | not present |
 | `jti`, `iss`, `iat`, `exp` | yes | yes |
@@ -398,7 +441,7 @@ so another method on the same path stays closed.
 
 | Request | Answer |
 |---|---|
-| `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/validate` | Allowed for everybody |
+| `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/validate` | Allowed for everybody |
 | `GET /.well-known/jwks.json` | Allowed for everybody |
 | `/internal/**` with the right `X-Internal-Key` | Allowed: the caller gets the role `INTERNAL` |
 | `/internal/**` with no key or a wrong key | `401` |
@@ -448,6 +491,20 @@ so another method on the same path stays closed.
   noticed at the next refresh.
 - There is no key rotation: one key is published. A new key invalidates all tokens.
 - Expired refresh tokens stay in the table.
+- A crash of this service between the creation of the profile and the saving of the account
+  leaves a profile without an account that keeps its email, so every later registration with it
+  is a `409`. Nothing logs the registration id before the crash: find the profile through the
+  admin API of the User Service and remove it with `DELETE /internal/users/{id}`. A repair job
+  would fix it.
+- An undoing whose three attempts all fail (the User Service stays unreachable for about a
+  second) leaves the profile too. The `ERROR` line `Undoing registration <id> is incomplete`
+  has the registration id: remove the profile with
+  `DELETE /internal/users/by-registration/<id>` and the internal key. A profile created before the
+  registration id existed has none and is removed by its own id.
+- The undoing is repeated, the creation is not, and there is no circuit breaker: a failed call to
+  the User Service is a `502` or `504`. When the User Service answers nothing, a failing
+  registration takes up to about 5 s for the creation and 15 s for the three deletions; a client
+  behind the Gateway gives up earlier, and the undoing still runs to its end.
 
 ## Troubleshooting
 
